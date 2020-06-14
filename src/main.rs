@@ -12,7 +12,7 @@ use twitchchat::{
 };
 
 struct Secrets {
-    nick: String,
+    name: String,
     oauth_token: String,
 }
 
@@ -22,17 +22,17 @@ impl Secrets {
         secrets.merge(config::File::with_name("secrets")).unwrap();
         let secrets = secrets.try_into::<HashMap<String, String>>().unwrap();
     
-        let nick = secrets.get("nick").cloned().unwrap();
+        let name = secrets.get("name").cloned().unwrap();
         let oauth_token = secrets.get("oauth_token").cloned().unwrap();
     
-        Secrets { nick, oauth_token }
+        Secrets { name, oauth_token }
     }
 }
 
 impl Into<UserConfig> for Secrets {
     fn into(self) -> UserConfig {
         twitchchat::UserConfig::builder()
-            .name(&self.nick)
+            .name(&self.name)
             .token(&self.oauth_token)
             .build()
             .unwrap()
