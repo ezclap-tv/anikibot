@@ -8,7 +8,7 @@ use std::convert::Into;
 use std::time;
 use tokio::stream::StreamExt as _;
 use twitchchat::{
-    events, messages, Control, Dispatcher, IntoChannel, RateLimit, Runner, Status, Writer, UserConfig
+    events, messages, Control, Dispatcher, Channel, IntoChannel, RateLimit, Runner, Status, Writer, UserConfig
 };
 
 struct Secrets {
@@ -39,9 +39,28 @@ impl Into<UserConfig> for Secrets {
     }
 }
 
+struct BotConfig {
+    channel: String
+}
+
+impl BotConfig {
+    fn get() -> BotConfig {
+        let mut config = config::Config::default();
+        config.merge(config::File::with_name("bot")).unwrap();
+        let config = config.try_into::<HashMap<String, String>>().unwrap();
+
+        let channel = config.get("channel").cloned().unwrap();
+
+        BotConfig {
+            channel
+        }
+    }
+}
+
 struct Bot {
     writer: Writer,
     control: Control,
+    config: BotConfig,
     start: time::Instant
 }
 
@@ -49,12 +68,13 @@ impl Bot {
     fn new(writer: Writer, control: Control) -> Bot {
         Bot {
             writer, control,
+            config: BotConfig::get(),
             start: time::Instant::now()
         }
     }
 
-    async fn run(mut self, dispatcher: Dispatcher, channel: impl IntoChannel) {
-        let channel = channel.into_channel().unwrap();
+    async fn run(mut self, dispatcher: Dispatcher) {
+        let channel = self.config.channel.clone().into_channel().unwrap();
 
         let mut events = dispatcher.subscribe::<events::All>();
 
@@ -101,8 +121,13 @@ impl Bot {
                 let resp = format!("xD");
                 self.writer.privmsg(&evt.channel, &resp).await.unwrap();
             },
+            "xD test" => {
+                println!("command \"xD test\" in channel {}", &evt.channel);
+                let resp = format!("FeelsDankMan uptime {:.2?}", time::Instant::now() - self.start);
+                self.writer.privmsg(&evt.channel, &resp).await.unwrap();
+            },
             "xD stop" => {
-                if evt.is_broadcaster() || evt.is_moderator() || evt.is_global_moderator() {
+                if &*evt.name == "moscowwbish" {
                     println!("command \"xD stop\" in channel {}", &evt.channel);
                     self.control.stop();
                     return false;
@@ -121,7 +146,7 @@ async fn main() {
     let (runner, mut control) = Runner::new(dispatcher.clone(), RateLimit::default());
     
     let bot = Bot::new(control.writer().clone(), control.clone())
-        .run(dispatcher, "supinic");
+        .run(dispatcher);
 
     let conn = twitchchat::connect_tls(&Secrets::get().into()).await.unwrap();
     
