@@ -18,4 +18,6 @@ oauth_token = "OAUTH_TOKEN"
 
 **Make sure that `BOT_NAME` matches the user for which the `OAUTH_TOKEN` was generated!**
 
+[TODO list](./TODO.md)
+
 [aniki]: https://i.imgur.com/LdLYvQO.png
