@@ -1,19 +1,28 @@
 extern crate config;
+extern crate log;
+extern crate pretty_env_logger;
 extern crate tokio;
 extern crate twitchchat;
-// extern crate reqwest; // see Cargo.toml notes comment
+
+extern crate backend;
 
 use std::collections::HashMap;
 use std::convert::Into;
 use std::time;
+
+use log::{error, info};
 use tokio::stream::StreamExt as _;
 use twitchchat::{
-    events, messages, Control, Dispatcher, Channel, IntoChannel, RateLimit, Runner, Status, Writer, UserConfig
+    events, messages, Channel, Control, Dispatcher, IntoChannel, RateLimit, Runner, Status,
+    UserConfig, Writer,
 };
+
+use backend::{StreamElementsAPI, StreamElementsConfig};
 
 struct Secrets {
     name: String,
     oauth_token: String,
+    stream_elements_jwt_token: String,
 }
 
 impl Secrets {
@@ -21,11 +30,22 @@ impl Secrets {
         let mut secrets = config::Config::default();
         secrets.merge(config::File::with_name("secrets")).unwrap();
         let secrets = secrets.try_into::<HashMap<String, String>>().unwrap();
-    
-        let name = secrets.get("name").cloned().unwrap();
-        let oauth_token = secrets.get("oauth_token").cloned().unwrap();
-    
-        Secrets { name, oauth_token }
+
+        let name = secrets.get("name").cloned().expect("Missing the bot name");
+        let oauth_token = secrets
+            .get("oauth_token")
+            .cloned()
+            .expect("Missing the oauth token");
+        let stream_elements_jwt_token = secrets
+            .get("stream_elements_jwt_token")
+            .cloned()
+            .expect("Missing the StreamElements JWT token");
+
+        Secrets {
+            name,
+            oauth_token,
+            stream_elements_jwt_token,
+        }
     }
 }
 
@@ -40,7 +60,7 @@ impl Into<UserConfig> for Secrets {
 }
 
 struct BotConfig {
-    channel: String
+    channel: String,
 }
 
 impl BotConfig {
@@ -51,25 +71,26 @@ impl BotConfig {
 
         let channel = config.get("channel").cloned().unwrap();
 
-        BotConfig {
-            channel
-        }
+        BotConfig { channel }
     }
 }
 
 struct Bot {
+    api: StreamElementsAPI,
     writer: Writer,
     control: Control,
     config: BotConfig,
-    start: time::Instant
+    start: time::Instant,
 }
 
 impl Bot {
-    fn new(writer: Writer, control: Control) -> Bot {
+    fn new(api: StreamElementsAPI, writer: Writer, control: Control) -> Bot {
         Bot {
-            writer, control,
+            api,
+            writer,
+            control,
             config: BotConfig::get(),
-            start: time::Instant::now()
+            start: time::Instant::now(),
         }
     }
 
@@ -90,12 +111,12 @@ impl Bot {
                     if !self.handle_join(join).await {
                         return;
                     }
-                },
+                }
                 messages::AllCommands::Privmsg(msg) => {
                     if !self.handle_msg(msg).await {
                         return;
                     }
-                },
+                }
                 _ => {}
             }
         }
@@ -106,7 +127,7 @@ impl Bot {
             "moscowwbish" => {
                 let resp = format!("gachiHYPER @moscowwbish");
                 self.writer.privmsg(&evt.channel, &resp).await.unwrap();
-            },
+            }
             _ => {}
         };
 
@@ -114,26 +135,45 @@ impl Bot {
     }
 
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) -> bool {
-        println!("{:?}", &*evt.data);
+        info!("received a new event: {:?}", &*evt.data);
         match &*evt.data {
             "xD" => {
-                println!("command \"xD\" in channel {}", &evt.channel);
+                info!("command \"xD\" in channel {}", &evt.channel);
                 let resp = format!("xD");
                 self.writer.privmsg(&evt.channel, &resp).await.unwrap();
-            },
+            }
             "xD test" => {
-                println!("command \"xD test\" in channel {}", &evt.channel);
-                let resp = format!("FeelsDankMan uptime {:.2?}", time::Instant::now() - self.start);
+                info!("command \"xD test\" in channel {}", &evt.channel);
+                let resp = format!(
+                    "FeelsDankMan uptime {:.2?}",
+                    time::Instant::now() - self.start
+                );
                 self.writer.privmsg(&evt.channel, &resp).await.unwrap();
-            },
+            }
+            cmd @ "xD whoami" => {
+                info!("command {:?} in channel {}", cmd, &evt.channel);
+                let resp = match self.api.channels().channel_id(&*evt.name).await {
+                    Ok(id) => format!("monkaHmm your id is {}", id),
+                    Err(e) => {
+                        error!(
+                            "Failed to fetch the channel id for the username {:?}: {}",
+                            &evt.name, e
+                        );
+                        format!("sorry Pepega devs broke something")
+                    }
+                };
+                self.writer.privmsg(&evt.channel, &resp).await.unwrap();
+            }
             "xD stop" => {
                 if &*evt.name == "moscowwbish" {
-                    println!("command \"xD stop\" in channel {}", &evt.channel);
+                    info!("command \"xD stop\" in channel {}", &evt.channel);
                     self.control.stop();
                     return false;
                 }
             }
-            _ => {}
+            rest => {
+                error!("unknown command: {:?}", rest);
+            }
         };
 
         true
@@ -142,14 +182,26 @@ impl Bot {
 
 #[tokio::main]
 async fn main() {
+    pretty_env_logger::init();
+
     let dispatcher = Dispatcher::new();
     let (runner, mut control) = Runner::new(dispatcher.clone(), RateLimit::default());
-    
-    let bot = Bot::new(control.writer().clone(), control.clone())
-        .run(dispatcher);
 
-    let conn = twitchchat::connect_tls(&Secrets::get().into()).await.unwrap();
-    
+    let secrets = Secrets::get();
+
+    info!("Initializing the stream_elements API.");
+    let api = StreamElementsAPI::new(
+        StreamElementsConfig::with_token(secrets.stream_elements_jwt_token.clone()).unwrap(),
+    )
+    .finalize()
+    .await
+    .unwrap();
+
+    let bot = Bot::new(api, control.writer().clone(), control.clone()).run(dispatcher);
+
+    info!("Connecting to twitch...");
+    let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();
+
     let done = runner.run(conn);
 
     tokio::select! {
