@@ -16,13 +16,17 @@ fn duration_format(duration: chrono::Duration) -> String {
     let days = duration.num_days();
     if days > 0 { output += &format!("{} days ", days); }
     let hours = duration.num_hours();
-    if hours > 0 { output += &format!("{} hours ", hours); }
+    if hours > 0 { output += &format!("{} hours ", hours - days*24); }
     let minutes = duration.num_minutes();
-    if minutes > 0 && days <= 0 { output += &format!("{} minutes ", minutes); }
+    if minutes > 0 && days <= 0 { output += &format!("{} minutes ", minutes - hours*60); }
     let seconds = duration.num_seconds();
-    if seconds > 0 && hours <= 0 { output += &format!("{} seconds", seconds); }
+    if seconds > 0 && hours <= 0 { output += &format!("{} seconds", seconds - minutes*60); }
     
     output
+}
+
+fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
+    &str[prefix.len()..str.len()]
 }
 
 pub struct Bot {
@@ -105,8 +109,8 @@ impl Bot {
             }
             rest if rest.starts_with("xD") => {
                 info!("unknown command {:?} in channel {}", rest, &evt.channel);
-                let rest = &rest["xD ".len()..rest.len()];
-                let resp = format!("WAYTOODANK unknown command WEEWOO {}", rest);
+                let rest = strip_prefix(rest, "xD ");
+                let resp = format!("WAYTOODANK 👉 UNKNOWN COMMAND \"{}\"", rest);
                 self.writer.privmsg(&evt.channel, &resp).await.unwrap();
             }
             _ => { /* not a command, just ignore 4Head */ }
