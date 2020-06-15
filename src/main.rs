@@ -1,22 +1,20 @@
+extern crate chrono;
 extern crate config;
 extern crate log;
 extern crate pretty_env_logger;
-extern crate tokio;
-extern crate twitchchat;
-extern crate chrono;
 extern crate serde;
 extern crate serde_json;
+extern crate tokio;
+extern crate twitchchat;
 
 extern crate backend;
 
-use backend::{Secrets, Bot, StreamElementsAPI, StreamElementsConfig};
+use backend::{Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 
 use std::convert::Into;
 
 use log::{error, info};
-use twitchchat::{
-    Dispatcher, RateLimit, Runner, Status,
-};
+use twitchchat::{Dispatcher, RateLimit, Runner, Status};
 
 #[tokio::main]
 async fn main() {

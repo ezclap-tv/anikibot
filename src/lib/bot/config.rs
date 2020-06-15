@@ -1,4 +1,3 @@
-
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -13,7 +12,7 @@ impl BotConfig {
 
         match config.try_into::<BotConfig>() {
             Err(err) => panic!(err.to_string()),
-            Ok(config) => config
+            Ok(config) => config,
         }
     }
 }

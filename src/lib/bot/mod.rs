@@ -1,27 +1,32 @@
-
 mod config;
 use self::config::BotConfig;
 
-use tokio::stream::StreamExt as _;
 use crate::stream_elements::api::StreamElementsAPI;
-use twitchchat::{
-    events, messages, Control, Dispatcher, IntoChannel, Writer,
-};
-use log::{info, error};
+use log::{error, info};
+use tokio::stream::StreamExt as _;
+use twitchchat::{events, messages, Control, Dispatcher, IntoChannel, Writer};
 
 // TODO move this elsewhere
 fn duration_format(duration: chrono::Duration) -> String {
     let mut output = String::from("");
-    
+
     let days = duration.num_days();
-    if days > 0 { output += &format!("{} days ", days); }
+    if days > 0 {
+        output += &format!("{} days ", days);
+    }
     let hours = duration.num_hours();
-    if hours > 0 { output += &format!("{} hours ", hours - days*24); }
+    if hours > 0 {
+        output += &format!("{} hours ", hours - days * 24);
+    }
     let minutes = duration.num_minutes();
-    if minutes > 0 && days <= 0 { output += &format!("{} minutes ", minutes - hours*60); }
+    if minutes > 0 && days <= 0 {
+        output += &format!("{} minutes ", minutes - hours * 60);
+    }
     let seconds = duration.num_seconds();
-    if seconds > 0 && hours <= 0 { output += &format!("{} seconds", seconds - minutes*60); }
-    
+    if seconds > 0 && hours <= 0 {
+        output += &format!("{} seconds", seconds - minutes * 60);
+    }
+
     output
 }
 
@@ -39,7 +44,6 @@ pub struct Bot {
 
 impl Bot {
     pub fn new(api: StreamElementsAPI, writer: Writer, control: Control) -> Bot {
-        
         Bot {
             api,
             writer,
@@ -57,7 +61,10 @@ impl Bot {
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
         info!("Connected to {} as {}", &channel, &ready.nickname);
-        self.writer.privmsg(&channel, "gachiHYPER I'M READY").await.unwrap();
+        self.writer
+            .privmsg(&channel, "gachiHYPER I'M READY")
+            .await
+            .unwrap();
         self.writer.join(&channel).await.unwrap();
 
         while let Some(event) = events.next().await {

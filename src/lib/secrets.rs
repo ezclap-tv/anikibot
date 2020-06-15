@@ -1,4 +1,3 @@
-
 use serde::Deserialize;
 use twitchchat::UserConfig;
 
@@ -16,7 +15,7 @@ impl Secrets {
 
         match secrets.try_into::<Secrets>() {
             Err(err) => panic!(err.to_string()),
-            Ok(secrets) => secrets
+            Ok(secrets) => secrets,
         }
     }
 }

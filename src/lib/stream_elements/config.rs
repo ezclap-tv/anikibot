@@ -1,5 +1,3 @@
-
-
 /// Stores the JWT token and channel_id required by the StreamElements API.
 pub struct StreamElementsConfig {
     pub jwt_token: String,
