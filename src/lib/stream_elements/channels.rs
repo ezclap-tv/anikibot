@@ -1,7 +1,7 @@
 //! Implements the API methods from the [`StreamElement's API reference`].
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
-use crate::stream_elements::StreamElementsAPI;
+use super::api::StreamElementsAPI;
 use reqwest::{Error, Response};
 use serde_json::Value;
 

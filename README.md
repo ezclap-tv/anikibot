@@ -23,7 +23,7 @@
 * Optionally build the documentation
 
     ```bash
-    $ cargo dog --no-deps
+    $ cargo doc --no-deps
     ```
 
     ```bash
@@ -40,8 +40,8 @@
     # Linux
     $ export RUST_LOG=aniki,backend
 
-    # Windows (not tested)
-    C:> set RUST_LOG=aniki,backend
+    # Windows
+    PS C:\\dev\\anikibot> $env:RUST_LOG="aniki"
     ```
 
 * Run the program

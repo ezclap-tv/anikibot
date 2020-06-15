@@ -21,36 +21,11 @@ use reqwest::{
     Client, Error as ReqwestError, RequestBuilder,
 };
 
-use crate::methods::Channels;
+use super::channels::Channels;
+use super::config::StreamElementsConfig;
 
 /// The base StreamElements' Kappa API URL.
 pub const BASE_API_URL: &'static str = "https://api.streamelements.com/kappa/v2";
-
-/// Stores the JWT token and channel_id required by the StreamElements API.
-pub struct StreamElementsConfig {
-    jwt_token: String,
-    channel_id: String,
-}
-
-impl StreamElementsConfig {
-    // XXX: maybe unpepega this error type
-    /// Create a new config using the given token. The token must be a valid ASCII string.
-    pub fn with_token(jwt_token: String) -> Result<Self, String> {
-        if jwt_token.is_ascii() {
-            Ok(Self {
-                jwt_token,
-                channel_id: String::new(),
-            })
-        } else {
-            Err(String::from("The JWT token must be a valid ASCII string."))
-        }
-    }
-
-    /// Set a channel id.
-    pub fn channel_id(self, channel_id: String) -> Self {
-        Self { channel_id, ..self }
-    }
-}
 
 /// Ensures that the API is properly configured.
 pub struct StreamElementsAPIGuard {
