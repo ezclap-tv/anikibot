@@ -22,10 +22,13 @@ use reqwest::{
 };
 
 use super::channels::Channels;
-use super::config::StreamElementsConfig;
+use super::{config::StreamElementsConfig, song_requests::SongRequests};
 
 /// The base StreamElements' Kappa API URL.
 pub const BASE_API_URL: &'static str = "https://api.streamelements.com/kappa/v2";
+
+/// An alias for `Result<T, Reqwest::Error>`.
+pub type APIError<T> = Result<T, ReqwestError>;
 
 /// Ensures that the API is properly configured.
 pub struct StreamElementsAPIGuard {
@@ -34,7 +37,7 @@ pub struct StreamElementsAPIGuard {
 
 impl StreamElementsAPIGuard {
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
-    pub async fn finalize(mut self) -> Result<StreamElementsAPI, ReqwestError> {
+    pub async fn finalize(mut self) -> APIError<StreamElementsAPI> {
         match &self.api.config.channel_id[..] {
             "" => {
                 warn!("Missing the channel id, attempting to GET");
@@ -101,8 +104,19 @@ impl StreamElementsAPI {
     #[allow(unused)]
     #[inline]
     pub(crate) fn get_method(&self, method: &str, endpoint: &str) -> RequestBuilder {
-        let url =
-            StreamElementsAPI::get_method_endpoint_url(&self.config.channel_id, method, endpoint);
+        self.get_method_for_channel_id(&self.config.channel_id, method, endpoint)
+    }
+
+    /// Builds a request for the given API method.
+    #[allow(unused)]
+    #[inline]
+    pub(crate) fn get_method_for_channel_id(
+        &self,
+        channel_id: &str,
+        method: &str,
+        endpoint: &str,
+    ) -> RequestBuilder {
+        let url = StreamElementsAPI::get_method_endpoint_url(channel_id, method, endpoint);
         debug!("GET: {}", url);
         self.client.get(&url)
     }
@@ -117,9 +131,17 @@ impl StreamElementsAPI {
 
     /// Returns the [`Channels`] API subset.
     ///
-    /// [`Channels`]: crate::methods::Channels
+    /// [`Channels`]: crate::stream_elements::channels::Channels
     #[inline(always)]
-    pub fn channels<'a>(&'a mut self) -> Channels<'a> {
+    pub fn channels<'a>(&'a self) -> Channels<'a> {
         Channels::new(self)
+    }
+
+    /// Returns the [`SongRequests`] API subset.
+    ///
+    /// [`SongRequests`]: crate::stream_elements::song_requests::SongRequests
+    #[inline(always)]
+    pub fn song_requests<'a>(&'a self) -> SongRequests<'a> {
+        SongRequests::new(self)
     }
 }

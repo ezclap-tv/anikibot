@@ -1,10 +1,11 @@
 mod config;
 use self::config::BotConfig;
 
-use crate::stream_elements::api::StreamElementsAPI;
 use log::{error, info};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel, Writer};
+
+use crate::stream_elements::api::StreamElementsAPI;
 
 // TODO move this elsewhere
 fn duration_format(duration: chrono::Duration) -> String {
@@ -102,6 +103,17 @@ impl Bot {
                             "Failed to fetch the channel id for the username {:?}: {}",
                             &evt.name, e
                         );
+                        format!("WAYTOODANK devs broke something")
+                    }
+                };
+                self.writer.privmsg(&evt.channel, &resp).await.unwrap();
+            }
+            cmd @ "xD song" => {
+                info!("command {:?} in channel {}", cmd, &evt.channel);
+                let resp = match self.api.song_requests().current_song_title().await {
+                    Ok(song) => format!("CheemJam currently playing song is {}", song),
+                    Err(e) => {
+                        error!("Failed to fetch the current song title {}", e);
                         format!("WAYTOODANK devs broke something")
                     }
                 };
