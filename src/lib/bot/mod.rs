@@ -11,6 +11,10 @@ use crate::{
     youtube::{YouTubePlaylistAPI, YouTubeVideo},
 };
 
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+
 // TODO move this elsewhere
 fn duration_format(duration: chrono::Duration) -> String {
     let mut output = String::from("");
@@ -36,27 +40,296 @@ fn duration_format(duration: chrono::Duration) -> String {
 }
 
 fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
-    &str[prefix.len()..str.len()]
+    if !str.starts_with(prefix) {
+        &str[..]
+    } else {
+        &str[prefix.len()..str.len()]
+    }
+}
+
+fn find_command<'a>(
+    commands: &HashMap<String, Command>,
+    message: &'a str,
+) -> Option<(CommandData, Option<Vec<&'a str>>)> {
+    // split the message by whitespace, collect into a vector
+    let tokens = message.split_whitespace().collect::<Vec<&str>>();
+    // next_commands holds the subcommands of the node we're looking at
+    let mut next_commands = commands;
+    for i in 0..tokens.len() {
+        if let Some(command) = next_commands.get(tokens[i]) {
+            // in this case, we may have gotten a command, or a subcommand
+            // first we grab the next token if we can (not out of bounds for the vector)
+            let commands = command.commands.as_ref();
+            let data = command.data.as_ref();
+
+            let next = if i + 1 < tokens.len() {
+                Some(tokens[i + 1])
+            } else {
+                None
+            };
+
+            // if there is another token AND this command has subcommands AND the token is in the list of subcommands
+            if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap())
+            {
+                // then we set the next_commands to commands
+                next_commands = commands.unwrap();
+                // and continue iterating
+                continue;
+            }
+
+            // otherwise, we check if we got any command data
+            if data.is_some() {
+                // if so, this is a command
+
+                // we're using the extra tokens as args:
+                // 1. split the tokens at the next index
+                let mut args: Option<Vec<&str>> = None;
+                if tokens.len() - i > 0 {
+                    let (_, right) = tokens.split_at(i + 1);
+                    // if there are any tokens on the right side
+                    if right.len() > 0 {
+                        // slap those suckers into a vec
+                        args = Some(right.to_vec())
+                    }
+                }
+                // then return the command data and arguments
+                return Some((data.cloned().unwrap(), args));
+            } else {
+                // otherwise, this is an unknown command
+                return None;
+            }
+        }
+    }
+
+    None
+}
+
+async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
+    let commands = &bot.commands;
+    if args.is_some() {
+        if let Some((command, _)) = find_command(commands, &args.unwrap().join(" ")) {
+            return format!("{}", command.help);
+        }
+    }
+
+    let mut resp = format!("FeelsDankMan 👉 try other commands: ");
+    let keys = commands.keys().into_iter().collect::<Vec<&String>>();
+    for i in 0..keys.len() {
+        // temporarily don't display "sensitive" commands
+        if keys[i] == "stop" {
+            continue;
+        }
+        resp += keys[i];
+        if i + 1 < keys.len() {
+            resp += ", "
+        }
+    }
+    return resp;
+}
+
+async fn ping_uptime(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    let uptime: chrono::Duration = chrono::Utc::now() - bot.start;
+    format!("FeelsDankMan uptime {}", duration_format(uptime))
+}
+
+async fn ping(_: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    format!("FeelsDankMan 👍 Pong!")
+}
+
+async fn whoami(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    match bot.se_api.channels().channel_id(&*evt.name).await {
+        Ok(id) => format!("monkaHmm your id is {}", id),
+        Err(e) => {
+            error!(
+                "Failed to fetch the channel id for the username {:?}: {}",
+                &evt.name, e
+            );
+            format!("WAYTOODANK devs broke something")
+        }
+    }
+}
+
+async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    if bot.is_boss(&evt.name) {
+        bot.stop();
+        return String::new();
+    }
+
+    return String::new();
+}
+
+async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    match bot.se_api.song_requests().current_song_title().await {
+        Ok(song) => format!("CheemJam currently playing song is {}", song),
+        Err(e) => {
+            error!("Failed to fetch the current song title {}", e);
+            format!("WAYTOODANK devs broke something")
+        }
+    }
+}
+
+async fn song_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
+    if !bot.is_boss(&evt.name) {
+        return format!("FeelsDnakMan Sorry, you don't have the permission to queue songs");
+    }
+    let yt_api = if let Some(api) = &mut bot.yt_api {
+        api
+    } else {
+        return format!("FeelsDnakMan Youtube API is not available");
+    };
+    // the extract_playlist_id function searches for the substring "list="
+    // so we can do the same here
+    let args = if let Some(args) = args {
+        args
+    } else {
+        return format!("THATSREALLYTOODANK No arguments provided!");
+    };
+
+    match args.get(0) {
+        Some(arg) => {
+            match extract_playlist_id(arg) {
+                Some(playlist_id) => yt_api.set_playlist(playlist_id),
+                None => {
+                    error!("Invalid playlist url: {}", arg);
+                    return format!("cheemSad Couldn't parse the playlist URL from your input");
+                }
+            };
+        }
+        None => {
+            return format!("THATSREALLYTOODANK No youtube playlist URL");
+        }
+    }
+
+    match args.get(1) {
+        Some(n) => match n.parse::<usize>() {
+            Ok(n) => {
+                yt_api.page_size(n);
+            }
+            Err(e) => {
+                error!("Invalid number of videos to queue: {}", e);
+                return format!("cheemSad Failed to queue the playlist");
+            }
+        },
+        None => (),
+    };
+
+    match yt_api.get_playlist_videos().await {
+        Ok(videos) => match bot.queue_videos(videos).await {
+            Ok(n) => {
+                return format!("Successfully queued {} song(s)", n);
+            }
+            Err(errors) => {
+                error!("Failed to queue n videos: {}", errors.len());
+                for e in errors {
+                    error!("=> Error: {}", e);
+                }
+                return format!("cheemSad Failed to queue the playlist");
+            }
+        },
+        Err(e) => {
+            error!("Failed to retrieve the videos in the playlist: {}", e);
+            return format!("cheemSad Failed to queue the playlist");
+        }
+    }
+}
+
+type ResponseFactory = for<'a> fn(
+    &'a mut Bot,
+    evt: &'a messages::Privmsg<'_>,
+    Option<Vec<&'a str>>,
+) -> Pin<Box<dyn Future<Output = String> + 'a>>;
+
+#[derive(Clone)]
+pub struct CommandData {
+    /// Contains info about command usage
+    help: String,
+    /// Pointer to function with command logic
+    /// This should eventually be replaced by a script
+    factory: ResponseFactory,
+}
+
+pub struct Command {
+    commands: Option<HashMap<String, Command>>,
+    data: Option<CommandData>,
 }
 
 pub struct Bot {
-    api: StreamElementsAPI,
-    yt_api: Option<YouTubePlaylistAPI>,
-    writer: Writer,
-    control: Control,
+    pub se_api: StreamElementsAPI,
+    pub yt_api: Option<YouTubePlaylistAPI>,
+    writer: Writer,   // exposed through Bot::send
+    control: Control, // exposed through Bot::stop
     config: config::BotConfig,
-    start: chrono::DateTime<chrono::Utc>,
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub commands: HashMap<String, Command>,
+    stopped: bool,
 }
 
 impl Bot {
     pub fn new(api: StreamElementsAPI, writer: Writer, control: Control) -> Bot {
+        let commands: HashMap<String, Command> = vec![
+            ("help".into(), Command {
+                commands: None,
+                data: Some(CommandData {
+                    help: "good one 4Head".into(),
+                    factory: |b,m,a| { Box::pin(help(b,m,a)) },
+                }),
+            }),
+            ("ping".into(), Command {
+                commands: Some(vec![
+                    ("uptime".into(),
+                    Command {
+                        commands: None,
+                        data: Some(CommandData {
+                            help: "Outputs the bot uptime".into(),
+                            factory: |b,m,a| { Box::pin(ping_uptime(b,m,a)) },
+                        }),
+                    })
+                ].into_iter().collect()),
+                data: Some(CommandData {
+                    help: "Pong!".into(),
+                    factory: |b,m,a| { Box::pin(ping(b,m,a)) },
+                }),
+            }),
+            ("whoami".into(), Command {
+                commands: None,
+                data: Some(CommandData {
+                    help: "monkaS Returns your StreamElements account id".into(),
+                    factory: |b,m,a| { Box::pin(whoami(b,m,a)) }
+                })
+            }),
+            ("stop".into(), Command {
+                commands: None,
+                data: Some(CommandData {
+                    help: "Stops the bot".into(),
+                    factory: |b,m,a| { Box::pin(stop(b,m,a)) }
+                })
+            }),
+            ("song".into(), Command {
+                commands: Some(vec![
+                    ("queue".into(), Command {
+                        commands: None,
+                        data: Some(CommandData {
+                            help: "FeelsDankMan Adds ~50 videos from a YouTube playlist to the StreamElements song queue. Usage: \"playlist queue <youtube playlist link>\"".into(),
+                            factory: |b,m,a| { Box::pin(song_queue(b,m,a))}
+                        })
+                    })
+                ].into_iter().collect()),
+                data: Some(CommandData {
+                    help: "Shows the currently playing song".into(),
+                    factory: |b,m,a| { Box::pin(song(b,m,a)) }
+                })
+            })
+        ].into_iter().collect();
+
         Bot {
-            api,
+            se_api: api,
             yt_api: None,
             writer,
             control,
             config: BotConfig::get(),
             start: chrono::Utc::now(),
+            commands,
+            stopped: false,
         }
     }
 
@@ -94,8 +367,8 @@ impl Bot {
         while let Some(event) = events.next().await {
             match &*event {
                 messages::AllCommands::Privmsg(msg) => {
-                    if !self.handle_msg(msg).await {
-                        return;
+                    if !self.stopped {
+                        self.handle_msg(msg).await;
                     }
                 }
                 _ => {}
@@ -103,143 +376,40 @@ impl Bot {
         }
     }
 
-    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) -> bool {
-        match &*evt.data {
-            cmd @ "xD" => {
-                info!("command {:?} in channel {}", cmd, &evt.channel);
-                self.send(evt, "xD").await;
-            }
-            cmd @ "xD ping" => {
-                info!("command {:?} in channel {}", cmd, &evt.channel);
-
-                let uptime: chrono::Duration = chrono::Utc::now() - self.start;
-                let resp = format!("FeelsDankMan uptime {}", duration_format(uptime));
-                self.send(evt, resp).await;
-            }
-            cmd @ "xD whoami" => {
-                info!("command {:?} in channel {}", cmd, &evt.channel);
-                let resp = match self.api.channels().channel_id(&*evt.name).await {
-                    Ok(id) => format!("monkaHmm your id is {}", id),
-                    Err(e) => {
-                        error!(
-                            "Failed to fetch the channel id for the username {:?}: {}",
-                            &evt.name, e
-                        );
-                        "WAYTOODANK devs broke something".to_owned()
-                    }
-                };
-                self.send(evt, resp).await;
-            }
-            cmd @ "xD song" => {
-                info!("command {:?} in channel {}", cmd, &evt.channel);
-                let resp = match self.api.song_requests().current_song_title().await {
-                    Ok(song) => format!("CheemJam currently playing song is {}", song),
-                    Err(e) => {
-                        error!("Failed to fetch the current song title {}", e);
-                        format!("WAYTOODANK devs broke something")
-                    }
-                };
-                self.send(evt, resp).await;
-            }
-            cmd @ "xD stop" => {
-                if &*evt.name == "moscowwbish" {
-                    info!("command {:?} in channel {}", cmd, &evt.channel);
-                    self.control.stop();
-                    return false;
-                }
-            }
-            cmd if cmd.starts_with("xD new playlist") => {
-                info!("command {:?} in channel {}", cmd, &evt.channel);
-                if !self.is_boss(&*evt.name) {
-                    self.send(
-                        evt,
-                        "FeelsDnakMan Sorry, you don't have the permission to change playlists",
-                    )
-                    .await;
-                    return true;
-                }
-                if self.yt_api.is_none() {
-                    self.send(evt, "FeelsDnakMan Youtube API is not is not available")
-                        .await;
-                    return true;
-                }
-                let args: Vec<&str> = cmd.split_whitespace().collect();
-                if args.len() < 4 {
-                    self.send(&evt, "THATSREALLYTOODANK Missing the playlist URL")
-                        .await;
-                    return true;
-                }
-
-                match extract_playlist_id(&args[3]) {
-                    Some(playlist_id) => self
-                        .yt_api
-                        .as_mut()
-                        .map(|api| api.set_playlist(playlist_id)),
-                    None => {
-                        error!("Invalid playlist url: {}", args[3]);
-                        self.send(
-                            evt,
-                            "cheemSad Couldn't parse the playlist URL from your input",
-                        )
-                        .await;
-                        return true;
-                    }
-                };
-
-                match args.get(4) {
-                    Some(n) => match n.parse::<usize>() {
-                        Ok(n) => self.yt_api.as_mut().map(|api| api.page_size(n)),
-                        Err(e) => {
-                            error!("Invalid number of videos to queue: {}", e);
-                            self.send(evt, "cheemSad couldn't parse the number of videos to queue")
-                                .await;
-                            return true;
-                        }
-                    },
-                    None => None,
-                };
-
-                match self.yt_api.as_mut().unwrap().get_playlist_videos().await {
-                    Ok(videos) => match self.queue_videos(videos).await {
-                        Ok(n) => {
-                            self.send(evt, format!("Successfully queued {} song(s)", n))
-                                .await
-                        }
-                        Err(errors) => {
-                            error!("Failed to queue n videos: {}", errors.len());
-                            for e in errors {
-                                error!("=> Error: {}", e);
-                            }
-                            self.send(evt, "THATSREALLYTOODANK failed to queue the playlist")
-                                .await;
-                        }
-                    },
-                    Err(e) => {
-                        error!("Failed to retrieve the videos in the playlist: {}", e);
-                        self.send(evt, "WAYTOODANK devs broke something").await;
-                    }
-                }
-            }
-            rest if rest.starts_with("xD") => {
-                info!("unknown command {:?} in channel {}", rest, &evt.channel);
-                let rest = strip_prefix(rest, "xD ");
-                self.send(evt, format!("WAYTOODANK 👉 UNKNOWN COMMAND \"{}\"", rest))
-                    .await;
-            }
-            _ => { /* not a command, just ignore 4Head */ }
-        };
-
-        true
+    pub fn stop(&mut self) {
+        self.control.stop();
+        self.stopped = true;
     }
 
-    async fn send<S: Into<String>>(&mut self, evt: &messages::Privmsg<'_>, message: S) {
+    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
+        if !evt.data.starts_with("xD") {
+            return;
+        }
+
+        // hardcoded "xD" response because it needs to exist
+        if evt.data.trim() == "xD" {
+            self.send(&evt.channel, "xD").await;
+            return;
+        }
+
+        let message = strip_prefix(&evt.data, "xD ");
+        if let Some((command, args)) = find_command(&self.commands, message) {
+            let response = (command.factory)(self, evt, args).await;
+            self.send(&evt.channel, &response).await;
+        } else {
+            self.send(&evt.channel, "WAYTOODANK 👉 Unknown command!")
+                .await;
+        }
+    }
+
+    async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {
         self.writer
-            .privmsg(&evt.channel, message.into())
+            .privmsg(channel, message.into())
             .await
             .unwrap_or_else(|e| {
                 error!(
                     "Caught a critical error while sending a response to the channel {}: {:?}",
-                    &evt.channel, e
+                    channel, e
                 );
             })
     }
@@ -250,7 +420,7 @@ impl Bot {
         for (i, v) in videos.into_iter().enumerate() {
             let url = v.into_url();
             info!("Attempting to queue song #{}: {}", i, url);
-            match self.api.song_requests().queue_song(&url).await {
+            match self.se_api.song_requests().queue_song(&url).await {
                 Ok(r) => {
                     queued += 1;
                     info!(
@@ -284,6 +454,7 @@ impl Bot {
 }
 
 fn extract_playlist_id(url: &str) -> Option<String> {
+    info!("{}", url);
     if let Some(start) = url.find("list=").map(|idx| idx + 5) {
         let mut end = url.len();
         for (i, ch) in url.chars().enumerate().skip(start + 1) {
