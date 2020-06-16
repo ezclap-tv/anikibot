@@ -12,8 +12,8 @@ use crate::{
 };
 
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::future::Future;
+use std::pin::Pin;
 
 // TODO move this elsewhere
 fn duration_format(duration: chrono::Duration) -> String {
@@ -40,11 +40,17 @@ fn duration_format(duration: chrono::Duration) -> String {
 }
 
 fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
-    if !str.starts_with(prefix) { &str[..] }
-    else { &str[prefix.len()..str.len()] }
+    if !str.starts_with(prefix) {
+        &str[..]
+    } else {
+        &str[prefix.len()..str.len()]
+    }
 }
 
-fn find_command<'a>(commands: &HashMap<String, Command>, message: &'a str) -> Option<(CommandData, Option<Vec<&'a str>>)> {
+fn find_command<'a>(
+    commands: &HashMap<String, Command>,
+    message: &'a str,
+) -> Option<(CommandData, Option<Vec<&'a str>>)> {
     // split the message by whitespace, collect into a vector
     let tokens = message.split_whitespace().collect::<Vec<&str>>();
     // next_commands holds the subcommands of the node we're looking at
@@ -63,7 +69,8 @@ fn find_command<'a>(commands: &HashMap<String, Command>, message: &'a str) -> Op
             };
 
             // if there is another token AND this command has subcommands AND the token is in the list of subcommands
-            if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap()) {
+            if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap())
+            {
                 // then we set the next_commands to commands
                 next_commands = commands.unwrap();
                 // and continue iterating
@@ -77,8 +84,8 @@ fn find_command<'a>(commands: &HashMap<String, Command>, message: &'a str) -> Op
                 // we're using the extra tokens as args:
                 // 1. split the tokens at the next index
                 let mut args: Option<Vec<&str>> = None;
-                if tokens.len() - i > 0 { 
-                    let (_, right) = tokens.split_at(i+1);
+                if tokens.len() - i > 0 {
+                    let (_, right) = tokens.split_at(i + 1);
                     // if there are any tokens on the right side
                     if right.len() > 0 {
                         // slap those suckers into a vec
@@ -88,7 +95,6 @@ fn find_command<'a>(commands: &HashMap<String, Command>, message: &'a str) -> Op
                 // then return the command data and arguments
                 return Some((data.cloned().unwrap(), args));
             } else {
-
                 // otherwise, this is an unknown command
                 return None;
             }
@@ -98,7 +104,7 @@ fn find_command<'a>(commands: &HashMap<String, Command>, message: &'a str) -> Op
     None
 }
 
-async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool){
+async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool) {
     let commands = bot.get_commands();
     println!("ARGS: {:?}", args);
     if args.is_some() {
@@ -111,24 +117,44 @@ async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>)
     let keys = commands.keys().into_iter().collect::<Vec<&String>>();
     for i in 0..keys.len() {
         // temporarily don't display "sensitive" commands
-        if keys[i] == "stop" { continue; }
+        if keys[i] == "stop" {
+            continue;
+        }
         resp += keys[i];
-        if i+1 < keys.len() { resp += ", " }
+        if i + 1 < keys.len() {
+            resp += ", "
+        }
     }
     return (resp, true);
 }
 
-async fn ping_uptime(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
+async fn ping_uptime(
+    bot: &mut Bot,
+    _: &messages::Privmsg<'_>,
+    _: Option<Vec<&str>>,
+) -> (String, bool) {
     let uptime: chrono::Duration = chrono::Utc::now() - *bot.get_start();
-    (format!("FeelsDankMan uptime {}", duration_format(uptime)), true)
+    (
+        format!("FeelsDankMan uptime {}", duration_format(uptime)),
+        true,
+    )
 }
 
 async fn ping(_: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
     (format!("FeelsDankMan 👍 Pong!"), true)
 }
 
-async fn whoami(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
-    match bot.get_streamelements_api().channels().channel_id(&*evt.name).await {
+async fn whoami(
+    bot: &mut Bot,
+    evt: &messages::Privmsg<'_>,
+    _: Option<Vec<&str>>,
+) -> (String, bool) {
+    match bot
+        .get_streamelements_api()
+        .channels()
+        .channel_id(&*evt.name)
+        .await
+    {
         Ok(id) => (format!("monkaHmm your id is {}", id), true),
         Err(e) => {
             error!(
@@ -149,7 +175,12 @@ async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) 
 }
 
 async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
-    match bot.get_streamelements_api().song_requests().current_song_title().await {
+    match bot
+        .get_streamelements_api()
+        .song_requests()
+        .current_song_title()
+        .await
+    {
         Ok(song) => (format!("CheemJam currently playing song is {}", song), true),
         Err(e) => {
             error!("Failed to fetch the current song title {}", e);
@@ -158,45 +189,56 @@ async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) ->
     }
 }
 
-async fn playlist_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool) {
+async fn playlist_queue(
+    bot: &mut Bot,
+    evt: &messages::Privmsg<'_>,
+    args: Option<Vec<&str>>,
+) -> (String, bool) {
     if !bot.is_boss(&evt.name) {
-        return (format!(
-            "FeelsDnakMan Sorry, you don't have the permission to change playlists",
-        ), true);
+        return (
+            format!("FeelsDnakMan Sorry, you don't have the permission to queue songs",),
+            true,
+        );
     }
-    let yt_api = if let Some(api) = bot.get_youtube_api_mut() { api } else {
-        return (format!("FeelsDnakMan Youtube API is not is not available"), true);
+    let yt_api = if let Some(api) = bot.get_youtube_api_mut() {
+        api
+    } else {
+        return (format!("FeelsDnakMan Youtube API is not available"), true);
     };
     // the extract_playlist_id function searches for the substring "list="
-    // so we can do the same here 
-    let args = if let Some(args) = args { args } else { 
+    // so we can do the same here
+    let args = if let Some(args) = args {
+        args
+    } else {
         return (format!("THATSREALLYTOODANK No arguments provided!"), true);
     };
 
-    if args.len() < 1 {
-        return (format!("THATSREALLYTOODANK No youtube playlist URL"), true);
-    }
-
-    match extract_playlist_id(args[0]) {
-        Some(playlist_id) => yt_api.set_playlist(playlist_id),
-        None => {
-            error!("Invalid playlist url: {}", args[0]);
-            return (format!(
-                "cheemSad Couldn't parse the playlist URL from your input",
-            ), true);
+    match args.get(0) {
+        Some(arg) => {
+            match extract_playlist_id(arg) {
+                Some(playlist_id) => yt_api.set_playlist(playlist_id),
+                None => {
+                    error!("Invalid playlist url: {}", arg);
+                    return (
+                        format!("cheemSad Couldn't parse the playlist URL from your input",),
+                        true,
+                    );
+                }
+            };
         }
-    };
+        None => {
+            return (format!("THATSREALLYTOODANK No youtube playlist URL"), true);
+        }
+    }
 
     match args.get(1) {
         Some(n) => match n.parse::<usize>() {
-            Ok(n) => { 
+            Ok(n) => {
                 yt_api.page_size(n);
-            },
+            }
             Err(e) => {
                 error!("Invalid number of videos to queue: {}", e);
-                return (format!(
-                    "cheemSad couldn't parse the number of videos to queue"
-                ), true);
+                return (format!("cheemSad Failed to queue the playlist"), true);
             }
         },
         None => (),
@@ -212,21 +254,24 @@ async fn playlist_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option
                 for e in errors {
                     error!("=> Error: {}", e);
                 }
-                return (format!("THATSREALLYTOODANK failed to queue the playlist"), true);
+                return (format!("cheemSad Failed to queue the playlist"), true);
             }
         },
         Err(e) => {
             error!("Failed to retrieve the videos in the playlist: {}", e);
-            return (format!("WAYTOODANK devs broke something"), true);
+            return (format!("cheemSad Failed to queue the playlist"), true);
         }
     }
 }
 
-type ResponseFactory = for<'a> fn(&'a mut Bot, evt: &'a messages::Privmsg<'_>, Option<Vec<&'a str>>) -> Pin<Box<dyn Future<Output = (String, bool)> + 'a>>;
+type ResponseFactory = for<'a> fn(
+    &'a mut Bot,
+    evt: &'a messages::Privmsg<'_>,
+    Option<Vec<&'a str>>,
+) -> Pin<Box<dyn Future<Output = (String, bool)> + 'a>>;
 
 #[derive(Clone)]
 pub struct CommandData {
-
     /// Contains info about command usage
     help: String,
     /// Pointer to function with command logic
@@ -302,14 +347,6 @@ impl Bot {
                 })
             }),
             ("song".into(), Command {
-                commands: None,
-                data: Some(CommandData {
-                    help: "Shows the currently playing song".into(),
-                    factory: |b,m,a| { Box::pin(song(b,m,a)) }
-                })
-            }),
-            ("playlist".into(), Command {
-                data: None,
                 commands: Some(vec![
                     ("queue".into(), Command {
                         commands: None,
@@ -318,7 +355,11 @@ impl Bot {
                             factory: |b,m,a| { Box::pin(playlist_queue(b,m,a))}
                         })
                     })
-                ].into_iter().collect())
+                ].into_iter().collect()),
+                data: Some(CommandData {
+                    help: "Shows the currently playing song".into(),
+                    factory: |b,m,a| { Box::pin(song(b,m,a)) }
+                })
             })
         ].into_iter().collect();
 
@@ -435,7 +476,8 @@ impl Bot {
                 return true;
             }
         } else {
-            self.send(&evt.channel, "WAYTOODANK 👉 Unknown command!").await;
+            self.send(&evt.channel, "WAYTOODANK 👉 Unknown command!")
+                .await;
             return true;
         }
     }
