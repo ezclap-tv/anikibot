@@ -106,7 +106,6 @@ fn find_command<'a>(
 
 async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool) {
     let commands = bot.get_commands();
-    println!("ARGS: {:?}", args);
     if args.is_some() {
         if let Some((command, _)) = find_command(commands, &args.unwrap().join(" ")) {
             return (format!("{}", command.help), true);
@@ -189,7 +188,7 @@ async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) ->
     }
 }
 
-async fn playlist_queue(
+async fn song_queue(
     bot: &mut Bot,
     evt: &messages::Privmsg<'_>,
     args: Option<Vec<&str>>,
@@ -352,7 +351,7 @@ impl Bot {
                         commands: None,
                         data: Some(CommandData {
                             help: "FeelsDankMan Adds ~50 videos from a YouTube playlist to the StreamElements song queue. Usage: \"playlist queue <youtube playlist link>\"".into(),
-                            factory: |b,m,a| { Box::pin(playlist_queue(b,m,a))}
+                            factory: |b,m,a| { Box::pin(song_queue(b,m,a))}
                         })
                     })
                 ].into_iter().collect()),
