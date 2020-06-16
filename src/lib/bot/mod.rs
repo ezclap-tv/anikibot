@@ -104,11 +104,11 @@ fn find_command<'a>(
     None
 }
 
-async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool) {
+async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
     let commands = &bot.commands;
     if args.is_some() {
         if let Some((command, _)) = find_command(commands, &args.unwrap().join(" ")) {
-            return (format!("{}", command.help), true);
+            return format!("{}", command.help);
         }
     }
 
@@ -124,92 +124,65 @@ async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>)
             resp += ", "
         }
     }
-    return (resp, true);
+    return resp;
 }
 
-async fn ping_uptime(
-    bot: &mut Bot,
-    _: &messages::Privmsg<'_>,
-    _: Option<Vec<&str>>,
-) -> (String, bool) {
+async fn ping_uptime(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
     let uptime: chrono::Duration = chrono::Utc::now() - bot.start;
-    (
-        format!("FeelsDankMan uptime {}", duration_format(uptime)),
-        true,
-    )
+    format!("FeelsDankMan uptime {}", duration_format(uptime))
 }
 
-async fn ping(_: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
-    (format!("FeelsDankMan 👍 Pong!"), true)
+async fn ping(_: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    format!("FeelsDankMan 👍 Pong!")
 }
 
-async fn whoami(
-    bot: &mut Bot,
-    evt: &messages::Privmsg<'_>,
-    _: Option<Vec<&str>>,
-) -> (String, bool) {
-    match bot
-        .se_api
-        .channels()
-        .channel_id(&*evt.name)
-        .await
-    {
-        Ok(id) => (format!("monkaHmm your id is {}", id), true),
+async fn whoami(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    match bot.se_api.channels().channel_id(&*evt.name).await {
+        Ok(id) => format!("monkaHmm your id is {}", id),
         Err(e) => {
             error!(
                 "Failed to fetch the channel id for the username {:?}: {}",
                 &evt.name, e
             );
-            (format!("WAYTOODANK devs broke something"), true)
+            format!("WAYTOODANK devs broke something")
         }
     }
 }
 
-async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
+async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
     if bot.is_boss(&evt.name) {
-        return (String::new(), false);
+        bot.stop();
+        return String::new();
     }
 
-    return (String::new(), true);
+    return String::new();
 }
 
-async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
-    match bot
-        .se_api
-        .song_requests()
-        .current_song_title()
-        .await
-    {
-        Ok(song) => (format!("CheemJam currently playing song is {}", song), true),
+async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
+    match bot.se_api.song_requests().current_song_title().await {
+        Ok(song) => format!("CheemJam currently playing song is {}", song),
         Err(e) => {
             error!("Failed to fetch the current song title {}", e);
-            (format!("WAYTOODANK devs broke something"), true)
+            format!("WAYTOODANK devs broke something")
         }
     }
 }
 
-async fn song_queue(
-    bot: &mut Bot,
-    evt: &messages::Privmsg<'_>,
-    args: Option<Vec<&str>>,
-) -> (String, bool) {
+async fn song_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
     if !bot.is_boss(&evt.name) {
-        return (
-            format!("FeelsDnakMan Sorry, you don't have the permission to queue songs",),
-            true,
-        );
+        return format!("FeelsDnakMan Sorry, you don't have the permission to queue songs");
     }
     let yt_api = if let Some(api) = &mut bot.yt_api {
         api
     } else {
-        return (format!("FeelsDnakMan Youtube API is not available"), true);
+        return format!("FeelsDnakMan Youtube API is not available");
     };
     // the extract_playlist_id function searches for the substring "list="
     // so we can do the same here
     let args = if let Some(args) = args {
         args
     } else {
-        return (format!("THATSREALLYTOODANK No arguments provided!"), true);
+        return format!("THATSREALLYTOODANK No arguments provided!");
     };
 
     match args.get(0) {
@@ -218,15 +191,12 @@ async fn song_queue(
                 Some(playlist_id) => yt_api.set_playlist(playlist_id),
                 None => {
                     error!("Invalid playlist url: {}", arg);
-                    return (
-                        format!("cheemSad Couldn't parse the playlist URL from your input",),
-                        true,
-                    );
+                    return format!("cheemSad Couldn't parse the playlist URL from your input");
                 }
             };
         }
         None => {
-            return (format!("THATSREALLYTOODANK No youtube playlist URL"), true);
+            return format!("THATSREALLYTOODANK No youtube playlist URL");
         }
     }
 
@@ -237,7 +207,7 @@ async fn song_queue(
             }
             Err(e) => {
                 error!("Invalid number of videos to queue: {}", e);
-                return (format!("cheemSad Failed to queue the playlist"), true);
+                return format!("cheemSad Failed to queue the playlist");
             }
         },
         None => (),
@@ -246,19 +216,19 @@ async fn song_queue(
     match yt_api.get_playlist_videos().await {
         Ok(videos) => match bot.queue_videos(videos).await {
             Ok(n) => {
-                return (format!("Successfully queued {} song(s)", n), true);
+                return format!("Successfully queued {} song(s)", n);
             }
             Err(errors) => {
                 error!("Failed to queue n videos: {}", errors.len());
                 for e in errors {
                     error!("=> Error: {}", e);
                 }
-                return (format!("cheemSad Failed to queue the playlist"), true);
+                return format!("cheemSad Failed to queue the playlist");
             }
         },
         Err(e) => {
             error!("Failed to retrieve the videos in the playlist: {}", e);
-            return (format!("cheemSad Failed to queue the playlist"), true);
+            return format!("cheemSad Failed to queue the playlist");
         }
     }
 }
@@ -267,7 +237,7 @@ type ResponseFactory = for<'a> fn(
     &'a mut Bot,
     evt: &'a messages::Privmsg<'_>,
     Option<Vec<&'a str>>,
-) -> Pin<Box<dyn Future<Output = (String, bool)> + 'a>>;
+) -> Pin<Box<dyn Future<Output = String> + 'a>>;
 
 #[derive(Clone)]
 pub struct CommandData {
@@ -286,26 +256,16 @@ pub struct Command {
 pub struct Bot {
     pub se_api: StreamElementsAPI,
     pub yt_api: Option<YouTubePlaylistAPI>,
-    pub writer: Writer,
-    pub control: Control,
-    pub config: config::BotConfig,
+    writer: Writer,   // exposed through Bot::send
+    control: Control, // exposed through Bot::stop
+    config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,
     pub commands: HashMap<String, Command>,
+    stopped: bool,
 }
 
 impl Bot {
     pub fn new(api: StreamElementsAPI, writer: Writer, control: Control) -> Bot {
-        /* command tree:
-            xD
-            |__<empty>
-            |__help
-            |__ping
-            |  |__uptime
-            |__whoami
-            |__stop
-            |__song
-        */
-
         let commands: HashMap<String, Command> = vec![
             ("help".into(), Command {
                 commands: None,
@@ -369,6 +329,7 @@ impl Bot {
             config: BotConfig::get(),
             start: chrono::Utc::now(),
             commands,
+            stopped: false,
         }
     }
 
@@ -406,8 +367,8 @@ impl Bot {
         while let Some(event) = events.next().await {
             match &*event {
                 messages::AllCommands::Privmsg(msg) => {
-                    if !self.handle_msg(msg).await {
-                        return;
+                    if !self.stopped {
+                        self.handle_msg(msg).await;
                     }
                 }
                 _ => {}
@@ -415,31 +376,29 @@ impl Bot {
         }
     }
 
-    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) -> bool {
+    pub fn stop(&mut self) {
+        self.control.stop();
+        self.stopped = true;
+    }
+
+    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
         if !evt.data.starts_with("xD") {
-            return true;
+            return;
         }
 
         // hardcoded "xD" response because it needs to exist
         if evt.data.trim() == "xD" {
             self.send(&evt.channel, "xD").await;
-            return true;
+            return;
         }
 
         let message = strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = find_command(&self.commands, message) {
-            let (response, continue_running) = (command.factory)(self, evt, args).await;
-            if !continue_running {
-                self.control.stop();
-                return false;
-            } else {
-                self.send(&evt.channel, &response).await;
-                return true;
-            }
+            let response = (command.factory)(self, evt, args).await;
+            self.send(&evt.channel, &response).await;
         } else {
             self.send(&evt.channel, "WAYTOODANK 👉 Unknown command!")
                 .await;
-            return true;
         }
     }
 
