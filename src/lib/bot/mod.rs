@@ -105,7 +105,7 @@ fn find_command<'a>(
 }
 
 async fn help(bot: &mut Bot, _: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> (String, bool) {
-    let commands = bot.get_commands();
+    let commands = &bot.commands;
     if args.is_some() {
         if let Some((command, _)) = find_command(commands, &args.unwrap().join(" ")) {
             return (format!("{}", command.help), true);
@@ -132,7 +132,7 @@ async fn ping_uptime(
     _: &messages::Privmsg<'_>,
     _: Option<Vec<&str>>,
 ) -> (String, bool) {
-    let uptime: chrono::Duration = chrono::Utc::now() - *bot.get_start();
+    let uptime: chrono::Duration = chrono::Utc::now() - bot.start;
     (
         format!("FeelsDankMan uptime {}", duration_format(uptime)),
         true,
@@ -149,7 +149,7 @@ async fn whoami(
     _: Option<Vec<&str>>,
 ) -> (String, bool) {
     match bot
-        .get_streamelements_api()
+        .se_api
         .channels()
         .channel_id(&*evt.name)
         .await
@@ -175,7 +175,7 @@ async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) 
 
 async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> (String, bool) {
     match bot
-        .get_streamelements_api()
+        .se_api
         .song_requests()
         .current_song_title()
         .await
@@ -199,7 +199,7 @@ async fn song_queue(
             true,
         );
     }
-    let yt_api = if let Some(api) = bot.get_youtube_api_mut() {
+    let yt_api = if let Some(api) = &mut bot.yt_api {
         api
     } else {
         return (format!("FeelsDnakMan Youtube API is not available"), true);
@@ -284,14 +284,13 @@ pub struct Command {
 }
 
 pub struct Bot {
-    api: StreamElementsAPI,
-    yt_api: Option<YouTubePlaylistAPI>,
-    writer: Writer,
-    control: Control,
-    config: config::BotConfig,
-    start: chrono::DateTime<chrono::Utc>,
-
-    commands: HashMap<String, Command>,
+    pub se_api: StreamElementsAPI,
+    pub yt_api: Option<YouTubePlaylistAPI>,
+    pub writer: Writer,
+    pub control: Control,
+    pub config: config::BotConfig,
+    pub start: chrono::DateTime<chrono::Utc>,
+    pub commands: HashMap<String, Command>,
 }
 
 impl Bot {
@@ -363,7 +362,7 @@ impl Bot {
         ].into_iter().collect();
 
         Bot {
-            api,
+            se_api: api,
             yt_api: None,
             writer,
             control,
@@ -416,43 +415,6 @@ impl Bot {
         }
     }
 
-    pub fn get_streamelements_api(&self) -> &StreamElementsAPI {
-        &self.api
-    }
-    pub fn get_streamelements_api_mut(&mut self) -> &mut StreamElementsAPI {
-        &mut self.api
-    }
-    pub fn get_youtube_api(&self) -> &Option<YouTubePlaylistAPI> {
-        &self.yt_api
-    }
-    pub fn get_youtube_api_mut(&mut self) -> Option<&mut YouTubePlaylistAPI> {
-        self.yt_api.as_mut()
-    }
-    pub fn get_writer(&self) -> &Writer {
-        &self.writer
-    }
-    pub fn get_writer_mut(&mut self) -> &mut Writer {
-        &mut self.writer
-    }
-    pub fn get_config(&self) -> &BotConfig {
-        &self.config
-    }
-    pub fn get_config_mut(&mut self) -> &mut BotConfig {
-        &mut self.config
-    }
-    pub fn get_start(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.start
-    }
-    pub fn get_start_mut(&mut self) -> &mut chrono::DateTime<chrono::Utc> {
-        &mut self.start
-    }
-    pub fn get_commands(&self) -> &HashMap<String, Command> {
-        &self.commands
-    }
-    pub fn get_commands_mut(&mut self) -> &mut HashMap<String, Command> {
-        &mut self.commands
-    }
-
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) -> bool {
         if !evt.data.starts_with("xD") {
             return true;
@@ -499,7 +461,7 @@ impl Bot {
         for (i, v) in videos.into_iter().enumerate() {
             let url = v.into_url();
             info!("Attempting to queue song #{}: {}", i, url);
-            match self.api.song_requests().queue_song(&url).await {
+            match self.se_api.song_requests().queue_song(&url).await {
                 Ok(r) => {
                     queued += 1;
                     info!(
