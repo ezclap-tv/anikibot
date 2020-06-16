@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, Deserialize)]
 pub struct BotConfig {
-    pub channel: String,
+    pub channels: HashSet<String>,
     pub gym_staff: HashSet<String>,
 }
 

@@ -1,2 +1,2 @@
-channel = "moscowwbish"
+channels = ["moscowwbish", "supinic", "samtwocan"]
 gym_staff = ["moscowwbish", "compileraddict"]

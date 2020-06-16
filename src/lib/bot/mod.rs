@@ -3,9 +3,9 @@ use self::config::BotConfig;
 
 use log::{error, info};
 use reqwest::Error as ReqwestError;
+use serde_json::{json, Value};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel, Writer};
-use serde_json::{json, Value};
 
 use crate::{
     stream_elements::api::StreamElementsAPI,
@@ -161,21 +161,26 @@ async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) 
 
 async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
     let song = bot.se_api.song_requests().current_song().await;
-    let song = if let Ok(song) = song { song } else {
+    let song = if let Ok(song) = song {
+        song
+    } else {
         return format!("cheemSad Unable to retrieve currently playing song!");
     };
     let song = song.json::<Value>().await;
-    let song = match song { 
+    let song = match song {
         Ok(song) => song,
         Err(e) => {
             error!("{}", e);
-            return format!("WAYTOODANK devs broke something")
+            return format!("WAYTOODANK devs broke something");
         }
     };
 
     let title = song["title"].as_str().unwrap();
     let video_id = song["videoId"].as_str().unwrap();
-    format!("CheemJam Currently playing song: {} CheemJam https://youtu.be/{}", title, video_id)
+    format!(
+        "CheemJam Currently playing song: {} CheemJam https://youtu.be/{}",
+        title, video_id
+    )
 }
 
 async fn song_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
@@ -361,18 +366,21 @@ impl Bot {
     }
 
     pub async fn run(mut self, dispatcher: Dispatcher) {
-        let channel = self.config.channel.clone().into_channel().unwrap();
-
         let mut events = dispatcher.subscribe::<events::All>();
 
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
-        info!("Connected to {} as {}", &channel, &ready.nickname);
+        for channel in &self.config.channels {
+            info!("Connected to {} as {}", &channel, &ready.nickname);
+            self.writer.join(&channel).await.unwrap();
+        }
         self.writer
-            .privmsg(&channel, "gachiHYPER I'M READY")
+            .privmsg(
+                "moscowwbish".into_channel().unwrap(),
+                "gachiHYPER I'M READY",
+            )
             .await
             .unwrap();
-        self.writer.join(&channel).await.unwrap();
 
         while let Some(event) = events.next().await {
             match &*event {
