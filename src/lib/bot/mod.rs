@@ -5,6 +5,7 @@ use log::{error, info};
 use reqwest::Error as ReqwestError;
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel, Writer};
+use serde_json::{json, Value};
 
 use crate::{
     stream_elements::api::StreamElementsAPI,
@@ -159,13 +160,22 @@ async fn stop(bot: &mut Bot, evt: &messages::Privmsg<'_>, _: Option<Vec<&str>>) 
 }
 
 async fn song(bot: &mut Bot, _: &messages::Privmsg<'_>, _: Option<Vec<&str>>) -> String {
-    match bot.se_api.song_requests().current_song_title().await {
-        Ok(song) => format!("CheemJam currently playing song is {}", song),
+    let song = bot.se_api.song_requests().current_song().await;
+    let song = if let Ok(song) = song { song } else {
+        return format!("cheemSad Unable to retrieve currently playing song!");
+    };
+    let song = song.json::<Value>().await;
+    let song = match song { 
+        Ok(song) => song,
         Err(e) => {
-            error!("Failed to fetch the current song title {}", e);
-            format!("WAYTOODANK devs broke something")
+            error!("{}", e);
+            return format!("WAYTOODANK devs broke something")
         }
-    }
+    };
+
+    let title = song["title"].as_str().unwrap();
+    let video_id = song["videoId"].as_str().unwrap();
+    format!("CheemJam Currently playing song: {} CheemJam https://youtu.be/{}", title, video_id)
 }
 
 async fn song_queue(bot: &mut Bot, evt: &messages::Privmsg<'_>, args: Option<Vec<&str>>) -> String {
