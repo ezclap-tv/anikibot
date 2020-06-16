@@ -28,7 +28,7 @@ use super::{config::StreamElementsConfig, song_requests::SongRequests};
 pub const BASE_API_URL: &'static str = "https://api.streamelements.com/kappa/v2";
 
 /// An alias for `Result<T, Reqwest::Error>`.
-pub type APIError<T> = Result<T, ReqwestError>;
+pub type APIResult<T> = Result<T, ReqwestError>;
 
 /// Ensures that the API is properly configured.
 pub struct StreamElementsAPIGuard {
@@ -37,7 +37,7 @@ pub struct StreamElementsAPIGuard {
 
 impl StreamElementsAPIGuard {
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
-    pub async fn finalize(mut self) -> APIError<StreamElementsAPI> {
+    pub async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
         match &self.api.config.channel_id[..] {
             "" => {
                 warn!("Missing the channel id, attempting to GET");
@@ -79,7 +79,7 @@ impl StreamElementsAPI {
     /// Formats `BASE_API_URL` with the given `channel_id`, `method`, and `endpoint` to obtain an API method URL.
     ///
     /// ```
-    /// # use backend::stream_elements::StreamElementsAPI;
+    /// # use backend::stream_elements::api::StreamElementsAPI;
     /// let url = StreamElementsAPI::get_method_endpoint_url("xxx", "songrequest", "player");
     /// assert_eq!(url, "https://api.streamelements.com/kappa/v2/songrequest/xxx/player");
     /// ```
@@ -91,7 +91,7 @@ impl StreamElementsAPI {
     /// Formats `BASE_API_URL` with the given `endpoint` to obtain an API method URL.
     ///
     /// ```
-    /// # use backend::stream_elements::StreamElementsAPI;
+    /// # use backend::stream_elements::api::StreamElementsAPI;
     /// let url = StreamElementsAPI::get_endpoint_url("songrequest/playing?provider=provider");
     /// assert_eq!(url, "https://api.streamelements.com/kappa/v2/songrequest/playing?provider=provider");
     /// ```
@@ -100,15 +100,19 @@ impl StreamElementsAPI {
         format!("{}/{}", BASE_API_URL, endpoint)
     }
 
+    /// Returns the configured channel id.
+    #[inline(always)]
+    pub fn channel_id(&self) -> &str {
+        &self.config.channel_id
+    }
+
     /// Builds a request for the given API method.
-    #[allow(unused)]
     #[inline]
     pub(crate) fn get_method(&self, method: &str, endpoint: &str) -> RequestBuilder {
         self.get_method_for_channel_id(&self.config.channel_id, method, endpoint)
     }
 
     /// Builds a request for the given API method.
-    #[allow(unused)]
     #[inline]
     pub(crate) fn get_method_for_channel_id(
         &self,
@@ -127,6 +131,34 @@ impl StreamElementsAPI {
         let url = StreamElementsAPI::get_endpoint_url(endpoint);
         debug!("GET: {}", url);
         self.client.get(&url)
+    }
+
+    /// Builds a POST request for the given API method.
+    pub(crate) fn post_method_for_channel_id(
+        &self,
+        channel_id: &str,
+        method: &str,
+        endpoint: &str,
+    ) -> RequestBuilder {
+        let url = StreamElementsAPI::get_method_endpoint_url(channel_id, method, endpoint);
+        debug!("POST: {}", url);
+        self.client.post(&url)
+    }
+
+    /// Builds a POST request for the given API method.
+    #[allow(unused)]
+    #[inline]
+    pub(crate) fn post_method(&self, method: &str, endpoint: &str) -> RequestBuilder {
+        self.post_method_for_channel_id(&self.config.channel_id, method, endpoint)
+    }
+
+    /// Builds a POST request for the given API endpoint.
+    #[allow(unused)]
+    #[inline]
+    pub(crate) fn post(&self, endpoint: &str) -> RequestBuilder {
+        let url = StreamElementsAPI::get_endpoint_url(endpoint);
+        debug!("POST: {}", url);
+        self.client.post(&url)
     }
 
     /// Returns the [`Channels`] API subset.

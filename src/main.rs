@@ -9,7 +9,7 @@ extern crate twitchchat;
 
 extern crate backend;
 
-use backend::{Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
+use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 
 use std::convert::Into;
 
@@ -34,7 +34,17 @@ async fn main() {
     .unwrap();
 
     info!("Initializing bot...");
-    let bot = Bot::new(api, control.writer().clone(), control.clone()).run(dispatcher);
+    let bot = if let Some(ref key) = secrets.youtube_api_key {
+        Bot::with_youtube_api(
+            api,
+            YouTubePlaylistAPI::new(key.to_owned()),
+            control.writer().clone(),
+            control.clone(),
+        )
+        .run(dispatcher)
+    } else {
+        Bot::new(api, control.writer().clone(), control.clone()).run(dispatcher)
+    };
 
     info!("Connecting to twitch...");
     let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();
