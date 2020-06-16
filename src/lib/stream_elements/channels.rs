@@ -1,7 +1,7 @@
 //! Implements the API methods from the [`StreamElement's API reference`].
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
-use super::api::{APIError, StreamElementsAPI};
+use super::api::{APIResult, StreamElementsAPI};
 use reqwest::Response;
 use serde_json::Value;
 
@@ -19,18 +19,18 @@ impl<'a> Channels<'a> {
 
     /// Retrieves the channel information of the API user.
     #[inline(always)]
-    pub async fn me(&self) -> APIError<Response> {
+    pub async fn me(&self) -> APIResult<Response> {
         self.channel("me").await
     }
 
     /// Retrieves the channel id of the API user.
     #[inline(always)]
-    pub async fn my_id(&self) -> APIError<String> {
+    pub async fn my_id(&self) -> APIResult<String> {
         self.channel_id("me").await
     }
 
     /// Retrieves the channel information of the user with the given name.
-    pub async fn channel(&self, name_or_id: &str) -> APIError<Response> {
+    pub async fn channel(&self, name_or_id: &str) -> APIResult<Response> {
         self.api
             .get(&format!("channels/{}/", name_or_id))
             .send()
@@ -38,7 +38,7 @@ impl<'a> Channels<'a> {
     }
 
     /// Retrieves the channel id of the user with the given name.
-    pub async fn channel_id(&self, channel_id: &str) -> APIError<String> {
+    pub async fn channel_id(&self, channel_id: &str) -> APIResult<String> {
         self.channel(channel_id)
             .await?
             .json::<Value>()
