@@ -1,0 +1,21 @@
+(* A program is a lit of statements *)
+program   ::= statement* EOF ;
+
+statement ::= ledDecl 
+            | fnDecl 
+            | block 
+            | exprStmt 
+            | "break"
+            | "continue"
+            ;
+
+block     ::= "{" statement* "}" ;
+fnDecl    ::= "fn" IDENTIFIER "(" params? ")" body ;
+letDecl   ::= "let" IDENTIFIER ( "=" expression )? ";" ;
+exprStmt  ::= expression ";" ;
+
+params    ::= IDENTIFIER ( "," ( "opt" )? IDENTIFIER )* ( "," )?  ;  (* Optional trailing comma *)
+
+
+IDENTIFIER := < [a-zA-Z_][a-zA-Z0-9_]* >;
+EOF ::= <END OF FILE> ;

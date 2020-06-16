@@ -14,3 +14,5 @@ pub use bot::Bot;
 
 pub mod secrets;
 pub use secrets::Secrets;
+
+pub mod dsl;
