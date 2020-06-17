@@ -6,7 +6,9 @@ use log::{error, info};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
-use crate::{stream_elements::consumer::ConsumerStreamElementsAPI, youtube::YouTubePlaylistAPI};
+use crate::{
+    stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
+};
 use command::Command;
 
 use std::collections::HashMap;
@@ -15,7 +17,7 @@ use std::collections::HashMap;
 
 pub struct BotBuilder {
     streamelements_api: Option<ConsumerStreamElementsAPI>,
-    youtube_api: Option<YouTubePlaylistAPI>,
+    youtube_api: Option<ConsumerYouTubePlaylistAPI>,
     commands: Option<HashMap<String, Command>>,
     control: Control,
 }
@@ -28,7 +30,7 @@ impl BotBuilder {
         }
     }
 
-    pub fn add_youtube_api(self, youtube_api: YouTubePlaylistAPI) -> Self {
+    pub fn add_youtube_api(self, youtube_api: ConsumerYouTubePlaylistAPI) -> Self {
         BotBuilder {
             youtube_api: Some(youtube_api),
             ..self
@@ -56,7 +58,7 @@ impl BotBuilder {
 
 pub struct Bot {
     pub streamelements: Option<ConsumerStreamElementsAPI>,
-    pub youtube_playlist: Option<YouTubePlaylistAPI>,
+    pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
     control: Control, // exposed through Bot::stop
     config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,

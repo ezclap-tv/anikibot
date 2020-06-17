@@ -42,7 +42,10 @@ async fn main() {
             builder = builder.add_streamelements_api(api);
         }
         if let Some(ref key) = secrets.youtube_api_key {
-            builder = builder.add_youtube_api(YouTubePlaylistAPI::new(key.to_owned()));
+            let (api, handle) =
+                YouTubePlaylistAPI::new(key.to_owned()).start(tokio::runtime::Handle::current());
+            thread_handles.push(handle);
+            builder = builder.add_youtube_api(api);
         }
 
         builder.build()
