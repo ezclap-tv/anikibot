@@ -15,24 +15,22 @@ impl Channels {
     }
 
     /// Retrieves the channel information of the API user.
-    #[inline(always)]
     pub async fn me(&self) -> APIResponse {
         api_send!(self, APIRequestKind::Channel_Me)
     }
 
     /// Retrieves the channel id of the API user.
-    #[inline(always)]
     pub async fn my_id(&self) -> APIResponse {
         api_send!(self, APIRequestKind::Channel_MyId)
     }
 
     /// Retrieves the channel information of the user with the given name.
-    pub async fn channel(&self, name_or_id: &str) -> APIResponse {
-        unimplemented!()
+    pub async fn channel<S: Into<String>>(&self, name: S) -> APIResponse {
+        api_send!(self, APIRequestKind::Channel_Chan { name: name.into() })
     }
 
     /// Retrieves the channel id of the user with the given name.
-    pub async fn channel_id(&self, channel_id: &str) -> APIResponse {
-        unimplemented!()
+    pub async fn channel_id(&self, name: &str) -> APIResponse {
+        api_send!(self, APIRequestKind::Channel_Id { name: name.into() })
     }
 }

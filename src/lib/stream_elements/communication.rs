@@ -1,4 +1,4 @@
-use crate::{BackendError, BoxedError};
+use crate::BackendError;
 use tokio::sync::{mpsc, oneshot};
 
 /// The type that is send back by the API thread.
@@ -10,7 +10,6 @@ pub type RequestSender = mpsc::UnboundedSender<APIRequestMessage>;
 /// The request `Sender` channel type.
 pub type ResponseSender = oneshot::Sender<APIResponse>;
 
-
 /// Indicates the kind of the API request to be made by the API thread.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
@@ -18,13 +17,26 @@ pub enum APIRequestKind {
     // Channel API
     Channel_Me,
     Channel_MyId,
-    Channel_Chan { name: String },
-    Channel_Id { name: String },
+    Channel_Chan {
+        name: String,
+    },
+    Channel_Id {
+        name: String,
+    },
     // SongRequest API
     SongReq_Settings,
-    SongReq_PublicSettings { channel_id: String },
+    SongReq_PublicSettings {
+        channel_id: String,
+    },
     SongReq_CurrentSong,
     SongReq_CurrentSongTitle,
+    SongReq_QueueSong {
+        song_url: String,
+    },
+    SongReq_QueueSongInChannel {
+        channel_id: String,
+        song_url: String,
+    },
 }
 
 /// A message sent to the API thread.
@@ -50,10 +62,7 @@ pub enum APIResponseMessage {
 pub(crate) fn spawn_api_thread(
     api: crate::StreamElementsAPI,
     runtime: tokio::runtime::Handle,
-) -> (
-    RequestSender,
-    std::thread::JoinHandle<()>,
-) {
+) -> (RequestSender, std::thread::JoinHandle<()>) {
     let (tx, mut rx) = mpsc::unbounded_channel::<APIRequestMessage>();
 
     log::trace!("Spawning the StreamElements API thread...");
@@ -61,21 +70,44 @@ pub(crate) fn spawn_api_thread(
     let handle = std::thread::spawn(move || {
         runtime.block_on(async move {
             log::trace!("Successfully spawned the StreamElements API thread.");
-    
+
             while let Some(msg) = rx.recv().await {
                 log::trace!("Received a StreamElements API request: {:#?}", msg.kind);
-    
+
                 let result = match msg.kind {
-                    APIRequestKind::Channel_MyId => api
-                        .channels()
-                        .my_id()
-                        .await
-                        .map(|res| APIResponseMessage::Str(res))
-                        .map_err(|e| {
-                            log::error!("Caught an error while processing a StreamElements API request: {:#?}", e);
-                            BackendError::from(Box::new(e) as BoxedError)
-                        }),
-                    rest => unimplemented!("API method {:?} is not implemented", rest),
+                    // CHannel API
+                    APIRequestKind::Channel_Me => resp_json!(api.channels().me().await),
+                    APIRequestKind::Channel_MyId => resp_str!(api.channels().my_id().await),
+                    APIRequestKind::Channel_Chan { name } => {
+                        resp_json!(api.channels().channel(&name).await)
+                    }
+                    APIRequestKind::Channel_Id { name } => {
+                        resp_str!(api.channels().channel_id(&name).await)
+                    }
+                    // SongRequest API
+                    APIRequestKind::SongReq_Settings => {
+                        resp_json!(api.song_requests().get_settings().await)
+                    }
+                    APIRequestKind::SongReq_PublicSettings { channel_id } => {
+                        resp_json!(api.song_requests().get_public_settings(&channel_id).await)
+                    }
+                    APIRequestKind::SongReq_CurrentSong => {
+                        resp_json!(api.song_requests().current_song().await)
+                    }
+                    APIRequestKind::SongReq_CurrentSongTitle => {
+                        resp_str!(api.song_requests().current_song_title().await)
+                    }
+                    APIRequestKind::SongReq_QueueSong { song_url } => {
+                        resp_json!(api.song_requests().queue_song(&song_url).await)
+                    }
+                    APIRequestKind::SongReq_QueueSongInChannel {
+                        channel_id,
+                        song_url,
+                    } => resp_json!(
+                        api.song_requests()
+                            .queue_song_in_channel(&channel_id, &song_url)
+                            .await
+                    ),
                 };
                 msg.output.send(result).unwrap();
             }
