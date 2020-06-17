@@ -64,7 +64,7 @@ impl StreamElementsAPIGuard {
     }
 }
 
-///! Provides a Rust interface to the StreamElements API.
+/// Provides a Rust interface to the StreamElements API.
 pub struct StreamElementsAPI {
     config: StreamElementsConfig,
     client: Client,
@@ -72,9 +72,9 @@ pub struct StreamElementsAPI {
 
 impl StreamElementsAPI {
     /// Creates a new `StreamElementsAPI` instance wrapped in the guard type.
-    /// To obtain the wrapped API object, the user must call [`finalize()`] and verify that the API is properly configured.
+    /// To obtain a usable API object, the user must call [`start()`] and verify that the API is properly configured.
     ///
-    /// [`finalize()`]: StreamElementsAPIGuard::finalize
+    /// [`start()`]: StreamElementsAPIGuard::start
     pub fn new(config: StreamElementsConfig) -> StreamElementsAPIGuard {
         let mut headers = HeaderMap::new();
         headers.insert("accept", HeaderValue::from_static("application/json"));

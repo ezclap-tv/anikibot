@@ -9,12 +9,12 @@ extern crate twitchchat;
 
 extern crate backend;
 
-use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
-
 use std::convert::Into;
 
 use log::{error, info};
 use twitchchat::{Dispatcher, RateLimit, Runner, Status};
+
+use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 
 #[tokio::main]
 async fn main() {
