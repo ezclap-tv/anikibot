@@ -29,15 +29,14 @@ async fn main() {
     let mut thread_handles: Vec<std::thread::JoinHandle<()>> = Vec::new();
 
     info!("Initializing bot...");
-    let bot =  {
+    let bot = {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
-            let (api, handle) = StreamElementsAPI::new(
-                StreamElementsConfig::with_token(key.to_owned()).unwrap(),
-            )
-            .start(tokio::runtime::Handle::current())
-            .await
-            .expect("Failed to start thread");
+            let (api, handle) =
+                StreamElementsAPI::new(StreamElementsConfig::with_token(key.to_owned()).unwrap())
+                    .start(tokio::runtime::Handle::current())
+                    .await
+                    .expect("Failed to start thread");
 
             thread_handles.push(handle);
             builder = builder.add_streamelements_api(api);
@@ -45,7 +44,7 @@ async fn main() {
         if let Some(ref key) = secrets.youtube_api_key {
             builder = builder.add_youtube_api(YouTubePlaylistAPI::new(key.to_owned()));
         }
-        
+
         builder.build()
     };
     let bot_done = bot.run(dispatcher);

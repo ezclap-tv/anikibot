@@ -1,16 +1,12 @@
-
+pub mod command;
 pub mod config;
 pub mod util;
-pub mod command;
 
 use log::{error, info};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
-use crate::{
-    stream_elements::consumer::ConsumerStreamElementsAPI,
-    youtube::YouTubePlaylistAPI,
-};
+use crate::{stream_elements::consumer::ConsumerStreamElementsAPI, youtube::YouTubePlaylistAPI};
 use command::Command;
 
 use std::collections::HashMap;
@@ -93,8 +89,8 @@ impl Bot {
             self.join(&channel).await;
         }
         self.send(
-                &"moscowwbish".into_channel().unwrap(),
-                "gachiHYPER I'M READY",
+            &"moscowwbish".into_channel().unwrap(),
+            "gachiHYPER I'M READY",
         )
         .await;
 
@@ -129,14 +125,15 @@ impl Bot {
         }
 
         let message = util::strip_prefix(&evt.data, "xD ");
-        if let Some((command, args)) = util::find_command(&self.commands, message) {
-            let response = (command.factory)(self, evt, args).await;
-            self.send(&evt.channel, &response).await;
+        if let Some((_, _)) = util::find_command(&self.commands, message) {
+            //let response = (command.factory)(self, evt, args).await;
+            self.send(&evt.channel, "FeelsDankMan ❓").await;
         }
     }
 
     async fn join(&mut self, channel: &str) {
-        self.control.writer()
+        self.control
+            .writer()
             .join(channel)
             .await
             .unwrap_or_else(|e| {
@@ -148,7 +145,8 @@ impl Bot {
     }
 
     async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {
-        self.control.writer()
+        self.control
+            .writer()
             .privmsg(channel, message.into())
             .await
             .unwrap_or_else(|e| {

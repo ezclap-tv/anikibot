@@ -23,10 +23,8 @@ use reqwest::{
 
 use super::channels::Channels;
 use super::{
-    communication::spawn_api_thread,
-    config::StreamElementsConfig,
-    consumer::ConsumerStreamElementsAPI,
-    song_requests::SongRequests,
+    communication::spawn_api_thread, config::StreamElementsConfig,
+    consumer::ConsumerStreamElementsAPI, song_requests::SongRequests,
 };
 use tokio::runtime;
 
