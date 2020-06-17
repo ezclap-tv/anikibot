@@ -1,4 +1,4 @@
-use super::command::{Command, CommandData};
+use super::command::Command;
 
 use std::collections::HashMap;
 
@@ -32,11 +32,15 @@ pub fn duration_format(duration: chrono::Duration) -> String {
 
     output
 }
-
+/*
 pub fn find_command<'a>(
     commands: &HashMap<String, Command>,
     message: &'a str,
 ) -> Option<(CommandData, Option<Vec<&'a str>>)> {
+    if !message.starts_with("xD") {
+        return None;
+    }
+
     let tokens = message.split_whitespace().collect::<Vec<&str>>();
     let mut next_commands = commands;
     for i in 0..tokens.len() {
@@ -72,4 +76,4 @@ pub fn find_command<'a>(
     }
 
     None
-}
+}*/

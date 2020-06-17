@@ -1,0 +1,12 @@
+{
+    "test": {
+        "usage": "Test command",
+        "script": "scripts/test.lua",
+        "commands": {
+            "test_sub": {
+                "usage": "Test subcommand",
+                "script": "scripts/test/sub.lua"
+            }
+        }
+    }
+}
