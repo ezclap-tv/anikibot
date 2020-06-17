@@ -1,10 +1,9 @@
-
 use super::Bot;
 use twitchchat::messages;
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::collections::HashMap;
 
 type ResponseFactory = for<'a> fn(
     &'a mut Bot,

@@ -14,6 +14,8 @@ pub use bot::Bot;
 pub use secrets::Secrets;
 pub use stream_elements::api::StreamElementsAPI;
 pub use stream_elements::config::StreamElementsConfig;
+pub use youtube::api::YouTubePlaylistAPI;
+pub use youtube::config::YouTubeAPIConfig;
 
 pub(crate) type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
