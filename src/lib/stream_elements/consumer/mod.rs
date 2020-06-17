@@ -5,11 +5,11 @@ pub mod channels;
 pub mod song_requests;
 
 #[derive(Debug, Clone)]
-pub struct ConsumeStreamElementsAPI {
+pub struct ConsumerStreamElementsAPI {
     tx: RequestSender,
 }
 
-impl ConsumeStreamElementsAPI {
+impl ConsumerStreamElementsAPI {
     pub fn new(tx: RequestSender) -> Self {
         Self { tx }
     }
