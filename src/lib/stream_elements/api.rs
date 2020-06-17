@@ -25,7 +25,7 @@ use super::channels::Channels;
 use super::{
     communication::{spawn_api_thread, APIHandle},
     config::StreamElementsConfig,
-    consumer::ConsumeStreamElementsAPI,
+    consumer::ConsumerStreamElementsAPI,
     song_requests::SongRequests,
 };
 use tokio::runtime;
@@ -46,10 +46,10 @@ impl StreamElementsAPIGuard {
     pub async fn start(
         self,
         runtime: runtime::Handle,
-    ) -> APIResult<(ConsumeStreamElementsAPI, std::thread::JoinHandle<()>)> {
+    ) -> APIResult<(ConsumerStreamElementsAPI, std::thread::JoinHandle<()>)> {
         let api = self.finalize().await?;
         let (tx, handle) = spawn_api_thread(api, runtime);
-        Ok((ConsumeStreamElementsAPI::new(tx), handle))
+        Ok((ConsumerStreamElementsAPI::new(tx), handle))
     }
 
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
