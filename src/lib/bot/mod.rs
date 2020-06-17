@@ -127,9 +127,9 @@ impl Bot {
         }
 
         let message = util::strip_prefix(&evt.data, "xD ");
-        if let Some((command, args)) = util::find_command(&self.commands, message) {
-            let response = (command.factory)(self, evt, args).await;
-            self.send(&evt.channel, &response).await;
+        if let Some((_, _)) = util::find_command(&self.commands, message) {
+            //let response = (command.factory)(self, evt, args).await;
+            self.send(&evt.channel, "FeelsDankMan ❓").await;
         }
     }
 

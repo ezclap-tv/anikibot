@@ -1,23 +1,15 @@
-use super::Bot;
-use twitchchat::messages;
-
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-type ResponseFactory = for<'a> fn(
-    &'a mut Bot,
-    evt: &'a messages::Privmsg<'_>,
-    Option<Vec<&'a str>>,
-) -> Pin<Box<dyn Future<Output = String> + 'a>>;
+use twitchchat::messages;
+
+use super::Bot;
 
 #[derive(Clone)]
 pub struct CommandData {
-    /// Contains info about command usage
-    pub help: String,
-    /// Pointer to function with command logic
-    /// This should eventually be replaced by a script
-    pub factory: ResponseFactory,
+    pub usage: String,
+    pub script: String,
 }
 
 pub struct Command {
