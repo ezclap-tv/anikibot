@@ -22,7 +22,13 @@ use reqwest::{
 };
 
 use super::channels::Channels;
-use super::{config::StreamElementsConfig, song_requests::SongRequests};
+use super::{
+    communication::{spawn_api_thread, APIHandle},
+    config::StreamElementsConfig,
+    consumer::ConsumeStreamElementsAPI,
+    song_requests::SongRequests,
+};
+use tokio::runtime;
 
 /// The base StreamElements' Kappa API URL.
 pub const BASE_API_URL: &'static str = "https://api.streamelements.com/kappa/v2";
@@ -36,8 +42,18 @@ pub struct StreamElementsAPIGuard {
 }
 
 impl StreamElementsAPIGuard {
+    /// Stars the API thread and returns its sender and thread handle.
+    pub async fn start(
+        self,
+        runtime: runtime::Handle,
+    ) -> APIResult<(ConsumeStreamElementsAPI, std::thread::JoinHandle<()>)> {
+        let api = self.finalize().await?;
+        let (tx, handle) = spawn_api_thread(api, runtime);
+        Ok((ConsumeStreamElementsAPI::new(tx), handle))
+    }
+
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
-    pub async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
+    async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
         match &self.api.config.channel_id[..] {
             "" => {
                 warn!("Missing the channel id, attempting to GET");

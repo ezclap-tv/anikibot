@@ -1,100 +1,14 @@
+#[macro_use]
+mod macros;
 pub mod api;
 pub mod channels;
+pub mod communication;
 pub mod config;
+pub mod consumer;
 pub mod song_requests;
-
-use crate::{BackendError, BoxedError};
-use tokio::sync::{mpsc, oneshot};
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq)]
-pub enum APIRequestKind {
-    // XXX: Maybe move into its own enum?
-    // Channel API
-    Channel_Me,
-    Channel_MyId,
-    Channel_Chan { name: String },
-    Channel_Id { name: String },
-    // SongRequest API
-    SongReq_Settings,
-    SongReq_PublicSettings { channel_id: String },
-    SongReq_CurrentSong,
-    SongReq_CurrentSongTitle,
-}
-
-#[derive(Debug)]
-pub enum APIRequestResponse {
-    Json(serde_json::Value),
-    Str(String),
-}
-
-#[derive(Debug)]
-pub struct APIRequestMessage {
-    pub kind: APIRequestKind,
-    pub output: oneshot::Sender<Result<APIRequestResponse, BackendError>>,
-}
-
-pub type APIResult = Result<APIRequestResponse, BackendError>;
-
-#[derive(Debug, Clone)]
-pub struct ConsumeStreamElementsAPI {
-    tx: mpsc::UnboundedSender<APIRequestMessage>,
-}
-
-impl ConsumeStreamElementsAPI {
-    pub async fn my_id(&self) -> APIResult {
-        let (tx, rx) = oneshot::channel();
-        self.tx
-            .send(APIRequestMessage {
-                kind: APIRequestKind::Channel_MyId,
-                output: tx,
-            })
-            .expect("The API thread receiver was dropped.");
-        rx.await.expect("The API thread oneshot sender was dropped")
-    }
-}
-
-fn spawn_api_thread(
-    api: crate::StreamElementsAPI,
-    runtime: tokio::runtime::Handle,
-) -> (
-    mpsc::UnboundedSender<APIRequestMessage>,
-    std::thread::JoinHandle<()>,
-) {
-    let (tx, mut rx) = mpsc::unbounded_channel::<APIRequestMessage>();
-
-    log::trace!("Spawning the StreamElements API thread...");
-    let handle = std::thread::spawn(move || {
-        runtime.block_on(async move {
-            log::trace!("Successfully spawned the StreamElements API thread.");
-            while let Some(msg) = rx.recv().await {
-                log::trace!("Received a StreamElements API request: {:#?}", msg.kind);
-                let result = match msg.kind {
-                    APIRequestKind::Channel_MyId => api
-                        .channels()
-                        .my_id()
-                        .await
-                        .map(|res| APIRequestResponse::Str(res))
-                        .map_err(|e| {
-                            log::error!("Caught an error while processing a StreamElements API request: {:#?}", e);
-                            BackendError::from(Box::new(e) as BoxedError)
-                        }),
-                    rest => unimplemented!("API method {:?} is not implemented", rest),
-                };
-                msg.output.send(result).unwrap();
-            }
-            log::trace!("Terminating the StreamElements API thread...")
-        });
-        log::trace!("Successfully terminated the StreamElements API thread.");
-    });
-
-    (tx, handle)
-}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_api_thread() {
         pretty_env_logger::init();
@@ -105,14 +19,13 @@ mod tests {
 
     async fn api_main(runtime: tokio::runtime::Handle) {
         let token = crate::Secrets::get().stream_elements_jwt_token;
-        let api =
+        let (api, _handle) =
             crate::StreamElementsAPI::new(crate::StreamElementsConfig::with_token(token).unwrap())
-                .finalize()
+                .start(runtime)
                 .await
                 .unwrap();
-        let (tx, _handle) = spawn_api_thread(api, runtime);
-        let api = ConsumeStreamElementsAPI { tx };
 
-        log::trace!("Received {:#?} from the API", api.my_id().await);
+        let result = api.channels().my_id().await;
+        log::trace!("Received {:#?} from the API", result);
     }
 }
