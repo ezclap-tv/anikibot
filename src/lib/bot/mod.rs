@@ -111,26 +111,28 @@ impl Bot {
     }
 
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
-        if !evt.data.starts_with("xD") {
-            return;
-        }
-
         // hardcoded "xD" response because it needs to exist
         if evt.data.trim() == "xD" {
             self.send(&evt.channel, "xD").await;
             return;
         }
 
-        if evt.data.trim() == "xD stop" {
+        if evt.data.trim() == "xD stop" && self.is_boss(&evt.name) {
             self.stop();
             return;
         }
 
-        let message = util::strip_prefix(&evt.data, "xD ");
-        if let Some((_, _)) = util::find_command(&self.commands, message) {
+        if evt.data.starts_with("xD reload ") && self.is_boss(&evt.name) {
+            let _message = util::strip_prefix(&evt.data, "xD reload ");
+            // reload the command
+            return;
+        }
+
+        let _ = util::strip_prefix(&evt.data, "xD ");
+        /*if let Some((_, _)) = util::find_command(&self.commands, message) {
             //let response = (command.factory)(self, evt, args).await;
             self.send(&evt.channel, "FeelsDankMan ❓").await;
-        }
+        }*/
     }
 
     async fn join(&mut self, channel: &str) {
