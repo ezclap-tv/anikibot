@@ -38,8 +38,8 @@ impl<'a> Channels<'a> {
     }
 
     /// Retrieves the channel id of the user with the given name.
-    pub async fn channel_id(&self, channel_id: &str) -> APIResult<String> {
-        self.channel(channel_id)
+    pub async fn channel_id(&self, name: &str) -> APIResult<String> {
+        self.channel(name)
             .await?
             .json::<Value>()
             .await
