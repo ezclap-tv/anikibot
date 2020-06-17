@@ -34,6 +34,26 @@ pub struct APIRequestMessage {
     pub output: oneshot::Sender<Result<APIRequestResponse, BackendError>>,
 }
 
+pub type APIResult = Result<APIRequestResponse, BackendError>;
+
+#[derive(Debug, Clone)]
+pub struct ConsumeStreamElementsAPI {
+    tx: mpsc::UnboundedSender<APIRequestMessage>,
+}
+
+impl ConsumeStreamElementsAPI {
+    pub async fn my_id(&self) -> APIResult {
+        let (tx, rx) = oneshot::channel();
+        self.tx
+            .send(APIRequestMessage {
+                kind: APIRequestKind::Channel_MyId,
+                output: tx,
+            })
+            .expect("The API thread receiver was dropped.");
+        rx.await.expect("The API thread oneshot sender was dropped")
+    }
+}
+
 fn spawn_api_thread(
     api: crate::StreamElementsAPI,
     runtime: tokio::runtime::Handle,
@@ -91,14 +111,8 @@ mod tests {
                 .await
                 .unwrap();
         let (tx, _handle) = spawn_api_thread(api, runtime);
+        let api = ConsumeStreamElementsAPI { tx };
 
-        let (to, ro) = oneshot::channel();
-        tx.send(APIRequestMessage {
-            kind: APIRequestKind::Channel_MyId,
-            output: to,
-        })
-        .unwrap();
-
-        log::trace!("Received {:#?} from the API", ro.await.unwrap());
+        log::trace!("Received {:#?} from the API", api.my_id().await);
     }
 }
