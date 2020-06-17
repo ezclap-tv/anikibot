@@ -5,17 +5,15 @@ extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
 
+pub mod bot;
+pub mod secrets;
 pub mod stream_elements;
-pub use stream_elements::api::StreamElementsAPI;
-pub use stream_elements::config::StreamElementsConfig;
-
 pub mod youtube;
 
-pub mod bot;
 pub use bot::Bot;
-
-pub mod secrets;
 pub use secrets::Secrets;
+pub use stream_elements::api::StreamElementsAPI;
+pub use stream_elements::config::StreamElementsConfig;
 
 pub(crate) type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 

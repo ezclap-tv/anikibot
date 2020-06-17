@@ -5,7 +5,7 @@ use twitchchat::UserConfig;
 pub struct Secrets {
     pub name: String,
     pub oauth_token: String,
-    pub stream_elements_jwt_token: String,
+    pub stream_elements_jwt_token: Option<String>,
     pub youtube_api_key: Option<String>,
 }
 
