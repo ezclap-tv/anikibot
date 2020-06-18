@@ -86,10 +86,8 @@ impl Bot {
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
         // I give up, how do you do this without a clone? LULW
-        for channel in &self.config.channels.clone() {
-            info!("Connected to {} as {}", &channel, &ready.nickname);
-            self.join(&channel).await;
-        }
+        self.join_configured_channels(&ready.nickname).await;
+
         self.send(
             &"moscowwbish".into_channel().unwrap(),
             "gachiHYPER I'M READY",
@@ -135,7 +133,8 @@ impl Bot {
         }*/
     }
 
-    async fn join(&mut self, channel: &str) {
+    pub async fn join(&mut self, channel: &str, nickname: &str) {
+        info!("Connected to {} as {}", &channel, nickname);
         self.control
             .writer()
             .join(channel)
@@ -146,6 +145,22 @@ impl Bot {
                     channel, e
                 );
             })
+    }
+
+    async fn join_configured_channels(&mut self, nickname: &str) {
+        for channel in self.config.channels.iter() {
+            info!("Connected to {} as {}", &channel, nickname);
+            self.control
+                .writer()
+                .join(channel)
+                .await
+                .unwrap_or_else(|e| {
+                    error!(
+                        "Caught a critical error while joining a channel {}: {:?}",
+                        channel, e
+                    );
+                })
+        }
     }
 
     async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {

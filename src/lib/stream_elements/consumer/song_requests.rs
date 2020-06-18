@@ -55,12 +55,32 @@ impl SongRequests {
     }
 
     /// Queues the given song in the API user's channel.
-    pub async fn queue_song<S: Into<String>>(&self, song_url: S) -> APIResponse {
+    pub async fn queue<S: Into<String>>(&self, song_url: S) -> APIResponse {
         api_send!(
             self,
             APIRequestKind::SongReq_QueueSong {
                 song_url: song_url.into()
             }
         )
+    }
+
+    /// Queues the given songs in the given channel.
+    pub async fn queue_many_in_channel<S: Into<String>>(
+        &self,
+        channel_id: S,
+        song_urls: Vec<String>,
+    ) -> APIResponse {
+        api_send!(
+            self,
+            APIRequestKind::SongReq_QueueManyInChannel {
+                channel_id: channel_id.into(),
+                song_urls
+            }
+        )
+    }
+
+    /// Queues the given songs in the API user's channel.
+    pub async fn queue_many<S: Into<String>>(&self, song_urls: Vec<String>) -> APIResponse {
+        api_send!(self, APIRequestKind::SongReq_QueueMany { song_urls })
     }
 }
