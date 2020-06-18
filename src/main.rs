@@ -19,6 +19,9 @@ use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, Stre
 async fn main() {
     pretty_env_logger::init();
 
+    log::info!("Creating a Lua instance.");
+    let lua = mlua::Lua::new();
+
     let dispatcher = Dispatcher::new();
     let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
 
@@ -47,7 +50,7 @@ async fn main() {
             builder = builder.add_youtube_api(api);
         }
 
-        builder.build()
+        builder.build(&lua)
     };
     let bot_done = bot.run(dispatcher);
 

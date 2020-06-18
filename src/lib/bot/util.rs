@@ -1,13 +1,10 @@
-
-
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-use std::io::prelude::*;
+use super::command::{Command, CommandData};
 use serde::Deserialize;
 use serde_json::from_str;
-use super::command::{Command, CommandData};
-
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufReader;
 
 pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
     if !str.starts_with(prefix) {
@@ -17,21 +14,20 @@ pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
     }
 }
 
-
 pub fn load_file(path: &str) -> String {
-    let file = File::open(path)
-        .expect(&format!("Could not open file {}", path));
+    let file = File::open(path).expect(&format!("Could not open file {}", path));
     let mut reader = BufReader::new(file);
     let mut contents = String::new();
-    reader.read_to_string(&mut contents)
+    reader
+        .read_to_string(&mut contents)
         .expect(&format!("Failed to read file {}", path));
 
     contents
 }
 
-pub fn parse_json<'a, R>(json: &'a str) -> R 
+pub fn parse_json<'a, R>(json: &'a str) -> R
 where
-    R: Deserialize<'a>
+    R: Deserialize<'a>,
 {
     match from_str(&json) {
         Ok(json) => json,
@@ -64,10 +60,10 @@ pub fn duration_format(duration: chrono::Duration) -> String {
     output
 }
 
-pub fn find_command<'a>(
-    commands: &HashMap<String, Command>,
+pub fn find_command<'a, 'lua>(
+    commands: &HashMap<String, Command<'lua>>,
     name: &'a str,
-) -> Option<(CommandData, Option<Vec<&'a str>>)> {
+) -> Option<(CommandData<'lua>, Option<Vec<&'a str>>)> {
     let tokens = name.split_whitespace().collect::<Vec<&str>>();
     let mut next_commands = commands;
     for i in 0..tokens.len() {

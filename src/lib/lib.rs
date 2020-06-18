@@ -4,8 +4,6 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
-#[macro_use]
-extern crate lazy_static;
 
 pub mod bot;
 pub mod secrets;
