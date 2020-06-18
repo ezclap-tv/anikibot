@@ -1,9 +1,11 @@
 pub mod command;
 pub mod config;
+mod lua_util;
 pub mod util;
 
 use std::collections::HashMap;
 use std::iter::FromIterator;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
@@ -14,6 +16,21 @@ use crate::{
 use command::{load_commands, Command};
 
 /* Previously had commands: help, ping, ping uptime, whoami, stop, song, song queue*/
+
+/// Initializes custom globals
+///
+/// Panics if called more than once
+fn init_globals<'a>(lua: &'a mlua::Lua) {
+    static mut CALLED: AtomicBool = AtomicBool::new(false);
+    unsafe {
+        if !CALLED.load(Ordering::Acquire) {
+            CALLED.store(true, Ordering::Release);
+            lua_util::init(lua);
+        } else {
+            panic!("Globals initialized more than once");
+        }
+    }
+}
 
 pub struct BotBuilder {
     streamelements_api: Option<ConsumerStreamElementsAPI>,
@@ -37,6 +54,7 @@ impl BotBuilder {
     }
 
     pub fn build<'lua>(self, lua: &'lua mlua::Lua) -> Bot<'lua> {
+        init_globals(lua);
         let commands: HashMap<String, Command<'lua>> = load_commands(lua, "commands.json");
 
         Bot {

@@ -2,13 +2,6 @@ use super::util;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Deserialize)]
-struct CommandJSON {
-    pub usage: Option<String>,
-    pub script: Option<String>,
-    pub commands: Option<HashMap<String, CommandJSON>>,
-}
-
 fn load_lua<'a>(lua: &'a mlua::Lua, name: &str, script: &str) -> mlua::Function<'a> {
     lua.load(script)
         .into_function()
@@ -47,6 +40,13 @@ fn transform<'a>(
 
 pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> HashMap<String, Command<'a>> {
     transform(lua, util::parse_json(&util::load_file(path)))
+}
+
+#[derive(Deserialize)]
+struct CommandJSON {
+    pub usage: Option<String>,
+    pub script: Option<String>,
+    pub commands: Option<HashMap<String, CommandJSON>>,
 }
 
 #[derive(Clone)]

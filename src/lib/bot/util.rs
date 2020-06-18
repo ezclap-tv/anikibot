@@ -69,7 +69,6 @@ pub fn find_command<'a, 'lua>(
     for i in 0..tokens.len() {
         if let Some(command) = next_commands.get(tokens[i]) {
             let commands = command.commands.as_ref();
-            let data = command.data.as_ref();
 
             let next = if i + 1 < tokens.len() {
                 Some(tokens[i + 1])
@@ -83,6 +82,7 @@ pub fn find_command<'a, 'lua>(
                 continue;
             }
 
+            let data = command.data.as_ref();
             if data.is_some() {
                 let mut args: Option<Vec<&str>> = None;
                 if tokens.len() - i > 0 {
