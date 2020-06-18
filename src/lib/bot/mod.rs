@@ -11,7 +11,7 @@ use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
-use command::{Command, load_commands};
+use command::{load_commands, Command};
 
 /* Previously had commands: help, ping, ping uptime, whoami, stop, song, song queue*/
 
@@ -36,9 +36,8 @@ impl BotBuilder {
         }
     }
 
-    pub fn build(self) -> Bot {
-        let commands: HashMap<String, Command> = load_commands( "commands.json");
-        
+    pub fn build<'lua>(self, lua: &'lua mlua::Lua) -> Bot<'lua> {
+        let commands: HashMap<String, Command<'lua>> = load_commands(lua, "commands.json");
 
         Bot {
             streamelements: self.streamelements_api,
@@ -51,16 +50,16 @@ impl BotBuilder {
     }
 }
 
-pub struct Bot {
+pub struct Bot<'lua> {
     pub streamelements: Option<ConsumerStreamElementsAPI>,
     pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
     control: Control, // exposed through Bot::stop
     config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,
-    pub commands: HashMap<String, Command>,
+    pub commands: HashMap<String, Command<'lua>>,
 }
 
-impl Bot {
+impl<'lua> Bot<'lua> {
     pub fn builder(control: Control) -> BotBuilder {
         BotBuilder {
             streamelements_api: None,
@@ -75,7 +74,6 @@ impl Bot {
     }
 
     pub async fn run(mut self, dispatcher: Dispatcher) {
-        
         let mut events = dispatcher.subscribe::<events::All>();
 
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
@@ -134,7 +132,8 @@ impl Bot {
                     return;
                 }
             };
-            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage)).await;
+            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage))
+                .await;
             return;
         }
 
@@ -145,7 +144,9 @@ impl Bot {
             } else {
                 mlua::Variadic::new()
             };
-            let response = (command.script).call_async::<mlua::Variadic<String>,String>(args).await;
+            let response = (command.script)
+                .call_async::<mlua::Variadic<String>, String>(args)
+                .await;
             let response = match response {
                 Ok(response) => response,
                 Err(e) => {
@@ -166,7 +167,8 @@ impl Bot {
             .unwrap_or_else(|e| {
                 log::error!(
                     "Caught a critical error while joining a channel {}: {:?}",
-                    channel, e
+                    channel,
+                    e
                 );
             })
     }
@@ -181,7 +183,8 @@ impl Bot {
                 .unwrap_or_else(|e| {
                     log::error!(
                         "Caught a critical error while joining a channel {}: {:?}",
-                        channel, e
+                        channel,
+                        e
                     );
                 })
         }
@@ -195,7 +198,8 @@ impl Bot {
             .unwrap_or_else(|e| {
                 log::error!(
                     "Caught a critical error while sending a response to the channel {}: {:?}",
-                    channel, e
+                    channel,
+                    e
                 );
             })
     }
