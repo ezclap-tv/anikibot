@@ -1,21 +1,60 @@
 (* A program is a lit of statements *)
 program   ::= statement* EOF ;
 
-statement ::= ledDecl 
-            | fnDecl 
+statement ::= var_decl 
+            | fn_decl 
             | block 
+            | if_stmt
+            | for_stmt
+            | while_stmt
+            | return
             | exprStmt 
             | "break"
             | "continue"
             ;
 
-block     ::= "{" statement* "}" ;
-fnDecl    ::= "fn" IDENTIFIER "(" params? ")" body ;
-letDecl   ::= "let" IDENTIFIER ( "=" expression )? ";" ;
-exprStmt  ::= expression ";" ;
+block      ::= ( "lua" "{" .* "}" ) 
+             | "{" statement* "}" 
+             ;
+fn_decl    ::= "fn" IDENTIFIER "(" params? ")" body ;
+var_decl   ::= ( "let" | "global" ) IDENTIFIER ( "=" expression )? ";" ;
+if_stmt    ::= "if" expression block ( else ( if_stmt | block ) )?;
+for_stmt   ::= ( "for" | "fori" ) IDENTIFIER ("," IDENTIFIER )* "in" ( range | arguments ) ;
+while_stmt ::= "while" expression block;
+return     ::= "return" arguments? ;
+expr_stmt  ::= expression ";" ;
 
-params    ::= IDENTIFIER ( "," ( "opt" )? IDENTIFIER )* ( "," )?  ;  (* Optional trailing comma *)
+expression      ::= logic_or | lambda_decl ;
+logic_or        ::= logic_and ( "or" logic_and )* ;
+logic_and       ::= equality ( "and" equality )* ;
+equality        ::= range ( ( "!=" | "==" ) range )* ;
+range           ::= ( "range" ) | comparison ;
+comparison      ::= addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
+addition        ::= multiplication ( ( "-" | "+" ) multiplication )* ;
+multiplication  ::= exponentiation ( ("/" | "*") exponentiation )* ;
+exponentiation  ::= unary ( ( "**" ) exponentiation )* ;
+unary           ::= ( "!" | "-" | "..." ) unary
+                  | call
+                  ;
+call            ::=  primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 
+primary        ::= "nil"
+                | "true" 
+                | "false" 
+                | NUMBER
+                | FSTRING
+                | STRING
+                | "(" assignment ")" 
+                | "[" arguments? "]"
+                | "{" pairs? "}"
+                ;
+
+
+(* Allow an optional trailing comma *)
+params     ::= IDENTIFIER ( "," ( "opt" )? IDENTIFIER )* ( "," )? ;  
+arguments  ::= expression ( "," expression)* ( "," )? ;
+pairs      ::= pair ("," pair )* ( "," )? ;
+pair       ::= expr ":" expr ;
 
 IDENTIFIER := < [a-zA-Z_][a-zA-Z0-9_]* >;
 EOF ::= <END OF FILE> ;

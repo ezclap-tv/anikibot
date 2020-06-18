@@ -9,41 +9,57 @@ extern crate twitchchat;
 
 extern crate backend;
 
-use backend::{Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
-
 use std::convert::Into;
 
 use log::{error, info};
 use twitchchat::{Dispatcher, RateLimit, Runner, Status};
+
+use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
 
     let dispatcher = Dispatcher::new();
-    let (runner, mut control) = Runner::new(dispatcher.clone(), RateLimit::default());
+    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
 
     let secrets = Secrets::get();
 
     info!("Initializing the StreamElements API.");
-    let api = StreamElementsAPI::new(
-        StreamElementsConfig::with_token(secrets.stream_elements_jwt_token.clone()).unwrap(),
-    )
-    .finalize()
-    .await
-    .unwrap();
+    let mut thread_handles: Vec<std::thread::JoinHandle<()>> = Vec::new();
 
     info!("Initializing bot...");
-    let bot = Bot::new(api, control.writer().clone(), control.clone()).run(dispatcher);
+    let bot = {
+        let mut builder = Bot::builder(control);
+        if let Some(ref key) = secrets.stream_elements_jwt_token {
+            let (api, handle) =
+                StreamElementsAPI::new(StreamElementsConfig::with_token(key.to_owned()).unwrap())
+                    .start(tokio::runtime::Handle::current())
+                    .await
+                    .expect("Failed to start thread");
+
+            thread_handles.push(handle);
+            builder = builder.add_streamelements_api(api);
+        }
+        if let Some(ref key) = secrets.youtube_api_key {
+            let (api, handle) =
+                YouTubePlaylistAPI::new(key.to_owned()).start(tokio::runtime::Handle::current());
+            thread_handles.push(handle);
+            builder = builder.add_youtube_api(api);
+        }
+
+        builder.build()
+    };
+    let bot_done = bot.run(dispatcher);
 
     info!("Connecting to twitch...");
     let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();
 
-    let done = runner.run(conn);
+    let runner_done = runner.run(conn);
 
     tokio::select! {
-        _ = bot => { info!("Bot stopped") },
-        status = done => {
+        _ = bot_done => { info!("Bot stopped") },
+        status = runner_done => {
             match status {
                 Ok(Status::Canceled) => {
                     error!("Runner cancelled");
