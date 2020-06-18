@@ -1,12 +1,43 @@
-use super::command::Command;
+
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+use std::io::prelude::*;
+use serde::Deserialize;
+use serde_json::from_str;
+use super::command::{Command, CommandData};
+
 
 pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
     if !str.starts_with(prefix) {
         &str[..]
     } else {
         &str[prefix.len()..str.len()]
+    }
+}
+
+
+pub fn load_file(path: &str) -> String {
+    let file = File::open(path)
+        .expect(&format!("Could not open file {}", path));
+    let mut reader = BufReader::new(file);
+    let mut contents = String::new();
+    reader.read_to_string(&mut contents)
+        .expect(&format!("Failed to read file {}", path));
+
+    contents
+}
+
+pub fn parse_json<'a, R>(json: &'a str) -> R 
+where
+    R: Deserialize<'a>
+{
+    match from_str(&json) {
+        Ok(json) => json,
+        Err(e) => {
+            panic!("Failed to read \"commands.json\": {}", e);
+        }
     }
 }
 
@@ -32,16 +63,12 @@ pub fn duration_format(duration: chrono::Duration) -> String {
 
     output
 }
-/*
+
 pub fn find_command<'a>(
     commands: &HashMap<String, Command>,
-    message: &'a str,
+    name: &'a str,
 ) -> Option<(CommandData, Option<Vec<&'a str>>)> {
-    if !message.starts_with("xD") {
-        return None;
-    }
-
-    let tokens = message.split_whitespace().collect::<Vec<&str>>();
+    let tokens = name.split_whitespace().collect::<Vec<&str>>();
     let mut next_commands = commands;
     for i in 0..tokens.len() {
         if let Some(command) = next_commands.get(tokens[i]) {
@@ -76,4 +103,4 @@ pub fn find_command<'a>(
     }
 
     None
-}*/
+}

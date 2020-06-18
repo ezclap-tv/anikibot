@@ -1,4 +1,4 @@
-use log::error;
+
 use reqwest::Response;
 use serde_json::{json, Value};
 
@@ -45,7 +45,7 @@ impl<'a> SongRequests<'a> {
             .await
             .map(|v| v["title"].as_str().unwrap().to_owned())
             .unwrap_or_else(|e| {
-                error!("Couldn't decode the current song info: {}", e);
+                log::error!("Couldn't decode the current song info: {}", e);
                 String::from("Nothing is playing at the moment.")
             }))
     }

@@ -1,1 +1,1 @@
-"test"
+return "test"

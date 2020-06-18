@@ -4,7 +4,6 @@ use super::{
     data::{PlaylistPage, Videos, YouTubeVideo},
 };
 use crate::{BackendError, BoxedError, YouTubeAPIConfig};
-use log::info;
 use reqwest::{Client, Error as ReqwestError};
 use serde_json::Value;
 use tokio::runtime;
@@ -77,7 +76,7 @@ impl YouTubePlaylistAPI {
     /// Changes the current playlist.
     #[inline]
     pub fn set_playlist(&mut self, playlist_id: String) {
-        info!("Switched to a new playlist id: {}", playlist_id);
+        log::info!("Switched to a new playlist id: {}", playlist_id);
         self.playlist_id = Some(playlist_id);
         self.next_page = String::new();
         self.number_of_videos = None;

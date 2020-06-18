@@ -2,23 +2,22 @@ pub mod command;
 pub mod config;
 pub mod util;
 
-use log::{error, info};
+use std::collections::HashMap;
+use std::iter::FromIterator;
+
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
-use command::Command;
-
-use std::collections::HashMap;
+use command::{Command, load_commands};
 
 /* Previously had commands: help, ping, ping uptime, whoami, stop, song, song queue*/
 
 pub struct BotBuilder {
     streamelements_api: Option<ConsumerStreamElementsAPI>,
     youtube_api: Option<ConsumerYouTubePlaylistAPI>,
-    commands: Option<HashMap<String, Command>>,
     control: Control,
 }
 
@@ -37,21 +36,17 @@ impl BotBuilder {
         }
     }
 
-    pub fn add_commands(self, commands: HashMap<String, Command>) -> Self {
-        BotBuilder {
-            commands: Some(commands),
-            ..self
-        }
-    }
-
     pub fn build(self) -> Bot {
+        let commands: HashMap<String, Command> = load_commands( "commands.json");
+        
+
         Bot {
             streamelements: self.streamelements_api,
             youtube_playlist: self.youtube_api,
             control: self.control,
             config: config::BotConfig::get(),
             start: chrono::Utc::now(),
-            commands: self.commands.unwrap_or_else(|| HashMap::new()),
+            commands,
         }
     }
 }
@@ -70,7 +65,6 @@ impl Bot {
         BotBuilder {
             streamelements_api: None,
             youtube_api: None,
-            commands: None,
             control,
         }
     }
@@ -81,6 +75,7 @@ impl Bot {
     }
 
     pub async fn run(mut self, dispatcher: Dispatcher) {
+        
         let mut events = dispatcher.subscribe::<events::All>();
 
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
@@ -109,6 +104,10 @@ impl Bot {
     }
 
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
+        if !evt.data.starts_with("xD") {
+            return;
+        }
+
         // hardcoded "xD" response because it needs to exist
         if evt.data.trim() == "xD" {
             self.send(&evt.channel, "xD").await;
@@ -126,21 +125,46 @@ impl Bot {
             return;
         }
 
-        let _ = util::strip_prefix(&evt.data, "xD ");
-        /*if let Some((_, _)) = util::find_command(&self.commands, message) {
-            //let response = (command.factory)(self, evt, args).await;
-            self.send(&evt.channel, "FeelsDankMan ❓").await;
-        }*/
+        if evt.data.starts_with("xD help ") {
+            let name = util::strip_prefix(&evt.data, "xD help ");
+            log::info!("Help for command {}", name);
+            let (data, _) = match util::find_command(&self.commands, &name) {
+                Some(found) => found,
+                None => {
+                    return;
+                }
+            };
+            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage)).await;
+            return;
+        }
+
+        let message = util::strip_prefix(&evt.data, "xD ");
+        if let Some((command, args)) = util::find_command(&self.commands, message) {
+            let args: mlua::Variadic<String> = if let Some(args) = args {
+                mlua::Variadic::from_iter(args.into_iter().map(|it| it.to_owned()))
+            } else {
+                mlua::Variadic::new()
+            };
+            let response = (command.script).call_async::<mlua::Variadic<String>,String>(args).await;
+            let response = match response {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to execute script: {:?}", e);
+                    format!("WAYTOODANK devs broke something!")
+                }
+            };
+            self.send(&evt.channel, response).await;
+        }
     }
 
     pub async fn join(&mut self, channel: &str, nickname: &str) {
-        info!("Connected to {} as {}", &channel, nickname);
+        log::info!("Connected to {} as {}", &channel, nickname);
         self.control
             .writer()
             .join(channel)
             .await
             .unwrap_or_else(|e| {
-                error!(
+                log::error!(
                     "Caught a critical error while joining a channel {}: {:?}",
                     channel, e
                 );
@@ -149,13 +173,13 @@ impl Bot {
 
     async fn join_configured_channels(&mut self, nickname: &str) {
         for channel in self.config.channels.iter() {
-            info!("Connected to {} as {}", &channel, nickname);
+            log::info!("Connected to {} as {}", &channel, nickname);
             self.control
                 .writer()
                 .join(channel)
                 .await
                 .unwrap_or_else(|e| {
-                    error!(
+                    log::error!(
                         "Caught a critical error while joining a channel {}: {:?}",
                         channel, e
                     );
@@ -169,7 +193,7 @@ impl Bot {
             .privmsg(channel, message.into())
             .await
             .unwrap_or_else(|e| {
-                error!(
+                log::error!(
                     "Caught a critical error while sending a response to the channel {}: {:?}",
                     channel, e
                 );
