@@ -89,6 +89,16 @@ impl StreamElementsAPI {
         }
     }
 
+    /// Makes a deep copy of the API. Useful for sending API objects to different threads.
+    #[inline]
+    pub(crate) fn deep_clone(&self) -> Option<Self> {
+        if self.config.channel_id.is_empty() {
+            None
+        } else {
+            Some(Self::new(self.config.clone()).api)
+        }
+    }
+
     /// Formats `BASE_API_URL` with the given `channel_id`, `method`, and `endpoint` to obtain an API method URL.
     ///
     /// ```

@@ -10,6 +10,9 @@ pub type RequestSender = mpsc::UnboundedSender<APIRequestMessage>;
 /// The request `Sender` channel type.
 pub type ResponseSender = oneshot::Sender<APIResponse>;
 
+/// The threshold after which the queueing task will be sent to another thread.
+pub const QUEUE_TASK_SEND_THRESHOLD: usize = 5;
+
 /// Indicates the kind of the API request to be made by the API thread.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
@@ -116,12 +119,44 @@ pub(crate) fn spawn_api_thread(
                             .await
                     ),
                     APIRequestKind::SongReq_QueueMany { song_urls } => {
-                        queue_many(&api, api.channel_id(), song_urls).await
+                        if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
+                            log::info!(
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                song_urls.len(),
+                                QUEUE_TASK_SEND_THRESHOLD,
+                            );
+                            let output = msg.output;
+                            let api = api.deep_clone().unwrap();
+                            tokio::spawn(async move {
+                                let result = queue_many(&api, api.channel_id(), song_urls).await;
+                                output.send(result).unwrap();
+                            });
+                            continue;
+                        } else {
+                            queue_many(&api, api.channel_id(), song_urls).await
+                        }
                     }
                     APIRequestKind::SongReq_QueueManyInChannel {
                         channel_id,
                         song_urls,
-                    } => queue_many(&api, &channel_id, song_urls).await,
+                    } => {
+                        if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
+                            log::info!(
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                song_urls.len(),
+                                QUEUE_TASK_SEND_THRESHOLD,
+                            );
+                            let output = msg.output;
+                            let api = api.deep_clone().unwrap();
+                            tokio::spawn(async move {
+                                let result = queue_many(&api, &channel_id, song_urls).await;
+                                output.send(result).unwrap();
+                            });
+                            continue;
+                        } else {
+                            queue_many(&api, &channel_id, song_urls).await
+                        }
+                    }
                 };
                 msg.output.send(result).unwrap();
             }

@@ -123,6 +123,38 @@ impl<'lua> Bot<'lua> {
             return;
         }
 
+        // Not the most clean and fragrant piece code
+        // but demonstrates the usage of tokio::spawn.
+        if evt.data.starts_with("xD queue") && self.is_boss(&evt.name) {
+            let parts: Vec<String> = evt
+                .data
+                .split_whitespace()
+                .skip(2)
+                .map(String::from)
+                .collect();
+            let yt = self.youtube_playlist.clone().unwrap();
+            let se = self.streamelements.clone().unwrap();
+            tokio::spawn(async move {
+                let id = parts.first().unwrap();
+                let num = parts.last().unwrap().parse::<usize>().unwrap();
+                yt.configure(id.to_owned(), num).await.unwrap();
+                let song_urls = yt
+                    .get_playlist_videos()
+                    .await
+                    .unwrap()
+                    .into_videos()
+                    .unwrap()
+                    .into_iter()
+                    .map(|v| v.into_url())
+                    .collect();
+                log::trace!(
+                    "{:?}",
+                    se.song_requests().queue_many(song_urls).await.unwrap()
+                );
+            });
+            return;
+        }
+
         if evt.data.starts_with("xD help ") {
             let name = util::strip_prefix(&evt.data, "xD help ");
             log::info!("Help for command {}", name);

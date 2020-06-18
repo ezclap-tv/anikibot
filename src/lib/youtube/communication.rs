@@ -57,6 +57,16 @@ pub enum APIResponseMessage {
     Videos(Videos),
 }
 
+impl APIResponseMessage {
+    #[inline]
+    pub fn into_videos(self) -> Result<Videos, Self> {
+        match self {
+            Self::Videos(videos) => Ok(videos),
+            _ => Err(self),
+        }
+    }
+}
+
 /// Spawns a YouTube API thread.
 /// Returns the sender part of the channel and the thread handle.
 pub(crate) fn spawn_api_thread(

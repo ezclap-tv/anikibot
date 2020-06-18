@@ -80,7 +80,7 @@ impl SongRequests {
     }
 
     /// Queues the given songs in the API user's channel.
-    pub async fn queue_many<S: Into<String>>(&self, song_urls: Vec<String>) -> APIResponse {
+    pub async fn queue_many(&self, song_urls: Vec<String>) -> APIResponse {
         api_send!(self, APIRequestKind::SongReq_QueueMany { song_urls })
     }
 }
