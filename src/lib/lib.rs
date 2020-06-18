@@ -6,6 +6,7 @@ extern crate tokio;
 extern crate twitchchat;
 
 pub mod bot;
+#[macro_use]
 pub mod lua;
 pub mod secrets;
 pub mod stream_elements;

@@ -1,9 +1,13 @@
 //! Implements the API methods from the [`StreamElement's API reference`].
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
-use crate::stream_elements::communication::{APIRequestKind, APIResponse, RequestSender};
+
+use mlua::{Lua, ToLua, UserData, UserDataMethods};
+use crate::stream_elements::communication::{APIResponseMessage, APIRequestKind, APIResponse, RequestSender};
+use crate::lua::JsonValue;
 
 /// Implements the `channels` API methods.
+#[derive(Clone)]
 pub struct Channels {
     tx: RequestSender,
 }
@@ -30,7 +34,36 @@ impl Channels {
     }
 
     /// Retrieves the channel id of the user with the given name.
-    pub async fn channel_id(&self, name: &str) -> APIResponse {
+    pub async fn channel_id<S: Into<String>>(&self, name: S) -> APIResponse {
         api_send!(self, APIRequestKind::Channel_Id { name: name.into() })
+    }
+}
+
+fn handle_api_response<'lua>(lua: &'lua Lua, response: APIResponse) -> Result<(mlua::Value, mlua::Value), mlua::Error> {
+    match response {
+        Ok(response) => match response {
+            APIResponseMessage::Json(json) => Ok((JsonValue(json).to_lua(lua)?, mlua::Nil)),
+            APIResponseMessage::Str(str) => Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
+        },
+        Err(err) => Ok((mlua::Nil, mlua::Value::String(lua.create_string(&format!("{}", err))?)))
+    }
+}
+
+impl UserData for Channels {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        
+
+        methods.add_async_method("me", |lua, instance, _: ()| async move {
+            handle_api_response(lua, instance.me().await)
+        });
+        methods.add_async_method("my_id", |lua, instance, _: ()| async move {
+            handle_api_response(lua, instance.my_id().await)
+        });
+        methods.add_async_method("channel", |lua, instance, name: String| async move {
+            handle_api_response(lua, instance.channel(name).await)
+        });
+        methods.add_async_method("channel_id", |lua, instance, name: String| async move {
+            handle_api_response(lua, instance.channel_id(name).await)
+        });
     }
 }

@@ -8,5 +8,9 @@
                 "script": "scripts/test/sub.lua"
             }
         }
+    },
+    "song": {
+        "usage": "Shows the currently playing song title and link",
+        "script": "scripts/song.lua"
     }
 }

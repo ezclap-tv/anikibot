@@ -1,7 +1,7 @@
 use mlua::{Lua, UserData, UserDataMethods, Variadic};
 
-/// Initializes
-pub fn init<'lua>(lua: &'lua Lua) {
+/// Initializes utility globals
+pub fn init_util_globals<'lua>(lua: &'lua Lua) {
     if let Err(e) = lua.globals().set("util", Util {}) {
         log::error!("Failed to set global object \"util\": {}", e);
     }

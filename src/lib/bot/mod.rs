@@ -7,6 +7,7 @@ use std::iter::FromIterator;
 
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
+use mlua::{UserData, UserDataMethods};
 
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
@@ -65,6 +66,13 @@ impl<'lua> Bot<'lua> {
             streamelements_api: None,
             youtube_api: None,
             control,
+        }
+    }
+
+    pub fn get_api_storage(&self) -> APIStorage {
+        APIStorage {
+            streamelements: self.streamelements.clone(),
+            youtube_playlist: self.youtube_playlist.clone()
         }
     }
 
@@ -234,5 +242,27 @@ impl<'lua> Bot<'lua> {
                     e
                 );
             })
+    }
+}
+
+pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage) {
+    if let Err(e) = lua.globals().set("api", api) {
+        log::error!("Failed to set global object \"api\": {}", e);
+    }
+}
+
+pub struct APIStorage {
+    pub streamelements: Option<ConsumerStreamElementsAPI>,
+    pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
+}
+
+impl UserData for APIStorage {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("streamelements", |_, instance, ()| {
+            Ok(instance.streamelements.clone())
+        });
+        methods.add_method("youtube_playlist", |_, instance, ()| {
+            Ok(instance.youtube_playlist.clone())
+        });
     }
 }

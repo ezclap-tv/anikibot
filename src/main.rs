@@ -23,7 +23,6 @@ async fn main() {
 
     log::info!("Creating a Lua instance.");
     let lua = mlua::Lua::new();
-    init_globals(&lua);
 
     let dispatcher = Dispatcher::new();
     let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
@@ -55,6 +54,8 @@ async fn main() {
 
         builder.build(&lua)
     };
+    init_globals(&lua, bot.get_api_storage());
+
     let bot_done = bot.run(dispatcher);
 
     log::info!("Connecting to twitch...");

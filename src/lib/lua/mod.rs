@@ -1,13 +1,49 @@
 mod util;
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use mlua::{Lua, ToLua};
+use util::init_util_globals;
+use crate::bot::{init_api_globals, APIStorage};
+
+// TODO: move this where it makes sense
+pub struct JsonValue(pub serde_json::Value);
+impl<'lua> ToLua<'lua> for JsonValue {
+    fn to_lua(self, lua: &'lua Lua) -> mlua::Result<mlua::Value<'lua>> {
+        match self.0 {
+            serde_json::Value::Array(a) => {
+                Ok(mlua::Value::Table(lua.create_sequence_from(a.into_iter().map(|v| JsonValue(v)))?))
+            },
+            serde_json::Value::Bool(b) => {
+                Ok(mlua::Value::Boolean(b))
+            },
+            serde_json::Value::Number(n) => {
+                Ok(mlua::Value::Number(n.as_f64().expect("good one dude LULW")))
+            },
+            serde_json::Value::Object(o) => {
+                Ok(mlua::Value::Table(lua.create_table_from(o.into_iter().map(|(k,v)| (k, JsonValue(v))))?))
+            },
+            serde_json::Value::String(s) => {
+                Ok(mlua::Value::String(lua.create_string(&s)?))
+            },
+            serde_json::Value::Null => {
+                Ok(mlua::Value::Nil)
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! lua_str { 
+    ($lua:ident, $str:expr) => { 
+        mlua::Value::String($lua.create_string($str)?) 
+    }; 
+} 
 
 static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
-
 /// Initializes custom globals
 ///
 /// Panics if called more than once
-pub fn init_globals<'a>(lua: &'a mlua::Lua) {
+pub fn init_globals<'a>(lua: &'a mlua::Lua, api: APIStorage) {
     unsafe {
         if INITIALIZED.load(Ordering::Acquire) {
             panic!("Globals initialized more than once");
@@ -15,5 +51,6 @@ pub fn init_globals<'a>(lua: &'a mlua::Lua) {
         INITIALIZED.store(true, Ordering::Release);
     }
 
-    util::init(lua);
+    init_util_globals(lua);
+    init_api_globals(lua, api);
 }
