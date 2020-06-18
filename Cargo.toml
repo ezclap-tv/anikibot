@@ -16,6 +16,7 @@ serde_json = "1.0.55"
 chrono = "0.4"
 mlua = { version = "0.4", features = ["async", "send", "lua53", "vendored"] }
 lazy_static = "1.4.0"
+anikibot = { path = "." }
 
 
 [lib]
