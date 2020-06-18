@@ -11,13 +11,11 @@ extern crate backend;
 
 use std::convert::Into;
 
-use twitchchat::{
-    Dispatcher, RateLimit, Runner, Status
-};
 use backend::{
-    youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig,
-    lua::init_globals
+    lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
+    StreamElementsConfig,
 };
+use twitchchat::{Dispatcher, RateLimit, Runner, Status};
 
 #[tokio::main]
 async fn main() {

@@ -1,5 +1,3 @@
-
-
 use mlua::{Lua, UserData, UserDataMethods, Variadic};
 
 /// Initializes

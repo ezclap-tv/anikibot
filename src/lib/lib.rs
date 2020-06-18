@@ -6,10 +6,10 @@ extern crate tokio;
 extern crate twitchchat;
 
 pub mod bot;
+pub mod lua;
 pub mod secrets;
 pub mod stream_elements;
 pub mod youtube;
-pub mod lua;
 
 pub use bot::Bot;
 pub use secrets::Secrets;
