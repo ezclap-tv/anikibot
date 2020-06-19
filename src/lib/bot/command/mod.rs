@@ -22,20 +22,20 @@ fn transform<'a>(
 ) -> HashMap<String, Command> {
     let mut transformed: HashMap<String, Command> = HashMap::new();
     for (name, command) in commands {
-        let data: Option<CommandData> = if command.usage.is_some() && command.script.is_some() {
-            Some(CommandData {
-                usage: command.usage.unwrap(),
-                is_expensive: command.is_expensive.unwrap_or_else(|| false),
-                path: command.script.as_ref().unwrap().clone(),
-                script: util::load_file(command.script.as_ref().unwrap())
-                    .and_then(|source| load_lua(&lua, &name, &source))
-                    .expect(&format!(
-                        "Failed to load the script at {}",
-                        command.script.unwrap()
-                    )),
-            })
-        } else {
-            None
+        let data: Option<CommandData> = match (command.usage, command.script) {
+            (Some(usage), Some(script)) => Some(CommandData {
+                usage,
+                is_expensive: command.is_expensive.unwrap_or(false),
+                path: script.clone(),
+                script: load_lua(
+                    &lua,
+                    &name,
+                    &util::load_file(&script)
+                        .unwrap_or_else(|e| panic!("Failed to load file {}: {}", script, e)),
+                )
+                .unwrap_or_else(|e| panic!("Failed to load the script {}: {}", script, e)),
+            }),
+            _ => None,
         };
 
         transformed.insert(
@@ -57,13 +57,14 @@ pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> HashMap<String, Comm
     transform(
         lua,
         util::parse_json(
-            &util::load_file(path)
-                .expect(&format!("Failed to locate the commands json at {}.", path)),
+            &util::load_file(path).unwrap_or_else(|e| {
+                panic!("Failed to locate the commands json at {}: {}", path, e)
+            }),
         ),
     )
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct CommandJSON {
     pub usage: Option<String>,
     pub is_expensive: Option<bool>,

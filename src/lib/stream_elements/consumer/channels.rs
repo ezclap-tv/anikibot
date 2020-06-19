@@ -41,8 +41,8 @@ impl Channels {
     }
 }
 
-fn handle_api_response<'lua>(
-    lua: &'lua Lua,
+fn handle_api_response(
+    lua: &Lua,
     response: APIResponse,
 ) -> Result<(mlua::Value, mlua::Value), mlua::Error> {
     match response {

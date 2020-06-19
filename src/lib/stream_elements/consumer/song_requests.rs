@@ -90,8 +90,8 @@ impl SongRequests {
     }
 }
 
-fn handle_api_response<'lua>(
-    lua: &'lua Lua,
+fn handle_api_response(
+    lua: &Lua,
     response: APIResponse,
 ) -> mlua::Result<(mlua::Value, mlua::Value)> {
     match response {

@@ -11,7 +11,7 @@ impl<'lua> ToLua<'lua> for JsonValue {
     fn to_lua(self, lua: &'lua Lua) -> mlua::Result<mlua::Value<'lua>> {
         match self.0 {
             serde_json::Value::Array(a) => Ok(mlua::Value::Table(
-                lua.create_sequence_from(a.into_iter().map(|v| JsonValue(v)))?,
+                lua.create_sequence_from(a.into_iter().map(JsonValue))?,
             )),
             serde_json::Value::Bool(b) => Ok(mlua::Value::Boolean(b)),
             serde_json::Value::Number(n) => {

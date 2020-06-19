@@ -9,7 +9,7 @@ use serde_json::Value;
 use tokio::runtime;
 
 /// The base part of the YouTube playlist API.
-pub const YOUTUBE_API_URL: &'static str =
+pub const YOUTUBE_API_URL: &str =
     "https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails";
 
 /// Provides a Rust interface to the YouTube Playlist API.
@@ -44,7 +44,7 @@ impl YouTubePlaylistAPI {
     /// To obtain a usable API object, the user must call [`start()`].
     ///
     /// [`start()`]: YouTubePlaylistAPIGuard::start
-    pub fn new(api_key: String) -> YouTubePlaylistAPIGuard {
+    pub fn with_api_key(api_key: String) -> YouTubePlaylistAPIGuard {
         YouTubePlaylistAPIGuard {
             api: Self {
                 api_key,
@@ -114,7 +114,7 @@ impl YouTubePlaylistAPI {
         ))
         .await
         .map(|p| {
-            self.next_page = p.next_page_token.clone().unwrap_or_else(|| String::new());
+            self.next_page = p.next_page_token.clone().unwrap_or_else(String::new);
             p
         })
         .map_err(|e| BackendError::from(Box::new(e) as BoxedError))
@@ -136,7 +136,7 @@ impl YouTubePlaylistAPI {
             videos: result["items"]
                 .as_array()
                 .unwrap()
-                .into_iter()
+                .iter()
                 .map(|v| YouTubeVideo {
                     id: v["contentDetails"]["videoId"].as_str().unwrap().to_owned(),
                 })

@@ -96,12 +96,9 @@ impl<'lua> Bot<'lua> {
         .await;
 
         while let Some(event) = events.next().await {
-            match &*event {
-                messages::AllCommands::Privmsg(msg) => {
-                    self.handle_msg(msg, lua).await;
-                }
-                _ => {}
-            }
+            if let messages::AllCommands::Privmsg(msg) = &*event {
+                self.handle_msg(msg, lua).await;
+            };
         }
     }
 
@@ -142,7 +139,7 @@ impl<'lua> Bot<'lua> {
                 }
                 Err(e) => {
                     log::error!("Failed to reload `{}`: {}", _message, e);
-                    self.send(&evt.channel, format!("WAYTOODANK ❗❗ something broke"))
+                    self.send(&evt.channel, "WAYTOODANK ❗❗ something broke".to_owned())
                         .await;
                 }
             }
@@ -190,7 +187,7 @@ impl<'lua> Bot<'lua> {
                 Ok(resp) => resp.unwrap(),
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);
-                    format!("WAYTOODANK devs broke something!")
+                    "WAYTOODANK devs broke something!".to_owned()
                 }
             };
             self.send(&evt.channel.clone(), response).await;
@@ -244,7 +241,7 @@ impl<'lua> Bot<'lua> {
     }
 }
 
-pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage, bot: BotInfo) {
+pub fn init_api_globals(lua: &mlua::Lua, api: APIStorage, bot: BotInfo) {
     let globals = lua.globals();
     if let Err(e) = globals.set("api", api) {
         panic!(format!("{}", e));

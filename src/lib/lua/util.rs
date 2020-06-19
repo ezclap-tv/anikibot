@@ -1,7 +1,7 @@
 use mlua::{Lua, UserData, UserDataMethods, Variadic};
 
 /// Initializes utility globals
-pub fn init_util_globals<'lua>(lua: &'lua Lua) {
+pub fn init_util_globals(lua: &Lua) {
     if let Err(e) = lua.globals().set("util", Util {}) {
         log::error!("Failed to set global object \"util\": {}", e);
     }
@@ -66,7 +66,7 @@ fn lua_value_to_string<'lua>(v: &mlua::Value<'lua>, is_top_level: bool) -> Strin
         mlua::Value::String(s) => match s.to_str() {
             Ok(s) => {
                 if is_top_level {
-                    format!("{}", s)
+                    s.to_owned()
                 } else {
                     format!("{:?}", s)
                 }

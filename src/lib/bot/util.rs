@@ -88,7 +88,10 @@ pub fn find_command<'a, 'lua>(
 
             if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap())
             {
-                next_commands = commands.unwrap();
+                next_commands = match commands {
+                    Some(a) => a,
+                    _ => unreachable!(),
+                };
                 continue;
             }
 
@@ -97,7 +100,7 @@ pub fn find_command<'a, 'lua>(
                 let mut args: Option<Vec<&str>> = None;
                 if tokens.len() - i > 0 {
                     let (_, right) = tokens.split_at(i + 1);
-                    if right.len() > 0 {
+                    if !right.is_empty() {
                         args = Some(right.to_vec())
                     }
                 }

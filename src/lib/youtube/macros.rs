@@ -32,7 +32,7 @@ macro_rules! yt_resp_str {
 macro_rules! yt_resp_videos {
     ($resp:expr) => {
         $resp
-            .map(|res| crate::youtube::communication::APIResponseMessage::Videos(res))
+            .map(crate::youtube::communication::APIResponseMessage::Videos)
             .map_err(|e| {
                 log::error!(
                     "Caught an error while processing a StreamElements API request: {:#?}",

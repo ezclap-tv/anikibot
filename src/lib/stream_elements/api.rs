@@ -27,7 +27,7 @@ use reqwest::{
 use tokio::runtime;
 
 /// The base StreamElements' Kappa API URL.
-pub const BASE_API_URL: &'static str = "https://api.streamelements.com/kappa/v2";
+pub const BASE_API_URL: &str = "https://api.streamelements.com/kappa/v2";
 
 /// An alias for `Result<T, Reqwest::Error>`.
 pub type APIResult<T> = Result<T, ReqwestError>;
@@ -50,12 +50,9 @@ impl StreamElementsAPIGuard {
 
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
     async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
-        match &self.api.config.channel_id[..] {
-            "" => {
-                log::warn!("Missing the channel id, attempting to GET");
-                self.api.config.channel_id = self.api.channels().my_id().await?;
-            }
-            _ => (),
+        if self.api.config.channel_id[..].is_empty() {
+            log::warn!("Missing the channel id, attempting to GET");
+            self.api.config.channel_id = self.api.channels().my_id().await?;
         }
         log::info!("Channel id appears to be correctly configured.");
         Ok(self.api)
@@ -73,7 +70,7 @@ impl StreamElementsAPI {
     /// To obtain a usable API object, the user must call [`start()`] and verify that the API is properly configured.
     ///
     /// [`start()`]: StreamElementsAPIGuard::start
-    pub fn new(config: StreamElementsConfig) -> StreamElementsAPIGuard {
+    pub fn with_config(config: StreamElementsConfig) -> StreamElementsAPIGuard {
         let mut headers = HeaderMap::new();
         headers.insert("accept", HeaderValue::from_static("application/json"));
         headers.insert(
@@ -94,7 +91,7 @@ impl StreamElementsAPI {
         if self.config.channel_id.is_empty() {
             None
         } else {
-            Some(Self::new(self.config.clone()).api)
+            Some(Self::with_config(self.config.clone()).api)
         }
     }
 
@@ -187,7 +184,7 @@ impl StreamElementsAPI {
     ///
     /// [`Channels`]: crate::stream_elements::channels::Channels
     #[inline(always)]
-    pub fn channels<'a>(&'a self) -> Channels<'a> {
+    pub fn channels(&self) -> Channels {
         Channels::new(self)
     }
 
@@ -195,7 +192,7 @@ impl StreamElementsAPI {
     ///
     /// [`SongRequests`]: crate::stream_elements::song_requests::SongRequests
     #[inline(always)]
-    pub fn song_requests<'a>(&'a self) -> SongRequests<'a> {
+    pub fn song_requests(&self) -> SongRequests {
         SongRequests::new(self)
     }
 }

@@ -101,7 +101,7 @@ pub(crate) fn spawn_api_thread(
                     APIRequestKind::Playlist_Get => Ok(APIResponseMessage::Str(
                         api.current_playlist()
                             .map(String::from)
-                            .unwrap_or_else(|| String::new()),
+                            .unwrap_or_else(String::new),
                     )),
                     APIRequestKind::Playlist_GetPageSize => {
                         Ok(APIResponseMessage::Number(api.items_per_page))

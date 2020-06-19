@@ -6,6 +6,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
+extern crate better_panic;
 
 extern crate backend;
 
@@ -19,6 +20,7 @@ use twitchchat::{Dispatcher, RateLimit, Runner, Status};
 
 #[tokio::main]
 async fn main() {
+    better_panic::install();
     pretty_env_logger::init();
 
     log::info!("Creating a Lua instance.");
@@ -37,7 +39,7 @@ async fn main() {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
             let (api, handle) =
-                StreamElementsAPI::new(StreamElementsConfig::with_token(key.to_owned()).unwrap())
+                StreamElementsAPI::with_config(StreamElementsConfig::with_token(key.to_owned()).unwrap())
                     .start(tokio::runtime::Handle::current())
                     .await
                     .expect("Failed to start thread");
@@ -47,7 +49,7 @@ async fn main() {
         }
         if let Some(ref key) = secrets.youtube_api_key {
             let (api, handle) =
-                YouTubePlaylistAPI::new(key.to_owned()).start(tokio::runtime::Handle::current());
+                YouTubePlaylistAPI::with_api_key(key.to_owned()).start(tokio::runtime::Handle::current());
             thread_handles.push(handle);
             builder = builder.add_youtube_api(api);
         }
