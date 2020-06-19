@@ -85,7 +85,7 @@ pub(crate) fn spawn_api_thread(
                 log::trace!("Received a StreamElements API request: {:#?}", msg.kind);
 
                 let result = match msg.kind {
-                    // CHannel API
+                    // Channel API
                     APIRequestKind::Channel_Me => resp_json!(api.channels().me().await),
                     APIRequestKind::Channel_MyId => resp_str!(api.channels().my_id().await),
                     APIRequestKind::Channel_Chan { name } => {
