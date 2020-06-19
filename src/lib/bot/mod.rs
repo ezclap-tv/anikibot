@@ -195,15 +195,21 @@ impl<'lua> Bot<'lua> {
 
         let message = util::strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = util::find_command(&self.commands, message) {
+            let header = vec![evt.channel.to_string(), evt.name.to_string()];
             let args: mlua::Variadic<String> = if let Some(args) = args {
-                mlua::Variadic::from_iter(args.into_iter().map(|it| it.to_owned()))
+                mlua::Variadic::from_iter(
+                    header
+                        .into_iter()
+                        .chain(args.into_iter().map(|it| it.to_owned())),
+                )
             } else {
-                mlua::Variadic::new()
+                mlua::Variadic::from_iter(header.into_iter())
             };
             let response = (command.script)
                 .call_async::<mlua::Variadic<String>, String>(args)
                 .await;
             let response = match response {
+                Ok(resp) if resp.is_empty() => return,
                 Ok(response) => response,
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);

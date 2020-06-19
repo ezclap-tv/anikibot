@@ -13,12 +13,70 @@ impl UserData for Util {
         methods.add_method("get_args", |lua, _, va: Variadic<String>| {
             let table = lua.create_table()?;
 
-            table.set("length", va.len())?;
-            for i in 0..va.len() {
+            table.set("length", va.len() - 2)?;
+            table.set("channel", va[0].clone())?;
+            table.set("user", va[1].clone())?;
+
+            for i in 2..va.len() {
                 table.set(i, va[i].clone())?;
             }
 
             Ok(table)
         });
+        methods.add_method("info", |_, _, va: Variadic<mlua::Value<'lua>>| {
+            log::info!(
+                "[ LUA ] {}",
+                va.into_iter()
+                    .map(|v| lua_value_to_string(&v, true))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            Ok(())
+        });
+        methods.add_method("debug", |_, _, va: Variadic<mlua::Value<'lua>>| {
+            log::debug!(
+                "[ LUA ] {}",
+                va.into_iter()
+                    .map(|v| lua_value_to_string(&v, true))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            Ok(())
+        })
+    }
+}
+
+fn lua_value_to_string<'lua>(v: &mlua::Value<'lua>, is_top_level: bool) -> String {
+    match v {
+        mlua::Value::Nil => "nil".to_owned(),
+        mlua::Value::Boolean(b) => b.to_string(),
+        mlua::Value::Integer(i) => i.to_string(),
+        mlua::Value::Number(n) => n.to_string(),
+        mlua::Value::String(s) => match s.to_str() {
+            Ok(s) => {
+                if is_top_level {
+                    format!("{}", s)
+                } else {
+                    format!("{:?}", s)
+                }
+            }
+            Err(e) => format!("{:?}", e),
+        },
+        mlua::Value::Table(t) => format!(
+            "{{ {} }}",
+            t.clone()
+                .pairs::<mlua::Value, mlua::Value>()
+                .map(|r| match r {
+                    Ok((k, v)) => format!(
+                        "{}: {}",
+                        lua_value_to_string(&k, false),
+                        lua_value_to_string(&v, false)
+                    ),
+                    Err(e) => format!("{:?}", e),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        rest => format!("{:#?}", rest),
     }
 }
