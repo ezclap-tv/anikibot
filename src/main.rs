@@ -11,12 +11,13 @@ extern crate better_panic;
 extern crate backend;
 
 use std::convert::Into;
-
 use backend::{
     lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
-    StreamElementsConfig,
+    StreamElementsConfig
 };
-use twitchchat::{Dispatcher, RateLimit, Runner, Status};
+use twitchchat::{
+    Dispatcher, RateLimit, Runner, Status
+};
 
 #[tokio::main]
 async fn main() {
@@ -27,7 +28,7 @@ async fn main() {
     let lua = mlua::Lua::new();
 
     let dispatcher = Dispatcher::new();
-    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
+    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::full(1, std::time::Duration::from_secs(1)));
 
     let secrets = Secrets::get();
 

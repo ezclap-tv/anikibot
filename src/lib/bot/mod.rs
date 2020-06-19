@@ -51,7 +51,7 @@ impl BotBuilder {
 pub struct Bot<'lua> {
     pub streamelements: Option<ConsumerStreamElementsAPI>,
     pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
-    control: Control, // exposed through Bot::stop
+    control: Control,
     config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,
     pub commands: HashMap<String, Command<'lua>>,
