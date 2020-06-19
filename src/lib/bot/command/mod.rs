@@ -1,11 +1,19 @@
 use super::util;
+use crate::BackendError;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-fn load_lua<'a>(lua: &'a mlua::Lua, name: &str, script: &str) -> mlua::Function<'a> {
-    lua.load(script)
-        .into_function()
-        .expect(&format!("Failed to load LUA script {}", name))
+pub(crate) fn load_lua<'a>(
+    lua: &'a mlua::Lua,
+    name: &str,
+    source: &str,
+) -> Result<mlua::Function<'a>, BackendError> {
+    lua.load(source).into_function().map_err(|e| {
+        BackendError::from(format!(
+            "Failed to load the LUA script at for `{}`: {}",
+            name, e
+        ))
+    })
 }
 
 fn transform<'a>(
@@ -17,7 +25,13 @@ fn transform<'a>(
         let data: Option<CommandData> = if command.usage.is_some() && command.script.is_some() {
             Some(CommandData {
                 usage: command.usage.unwrap(),
-                script: load_lua(&lua, &name, &util::load_file(&command.script.unwrap())),
+                path: command.script.as_ref().unwrap().clone(),
+                script: util::load_file(command.script.as_ref().unwrap())
+                    .and_then(|source| load_lua(&lua, &name, &source))
+                    .expect(&format!(
+                        "Failed to load the script at {}",
+                        command.script.unwrap()
+                    )),
             })
         } else {
             None
@@ -39,7 +53,13 @@ fn transform<'a>(
 }
 
 pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> HashMap<String, Command<'a>> {
-    transform(lua, util::parse_json(&util::load_file(path)))
+    transform(
+        lua,
+        util::parse_json(
+            &util::load_file(path)
+                .expect(&format!("Failed to locate the commands json at {}.", path)),
+        ),
+    )
 }
 
 #[derive(Deserialize)]
@@ -52,6 +72,7 @@ struct CommandJSON {
 #[derive(Clone)]
 pub struct CommandData<'a> {
     pub usage: String,
+    pub path: String,
     pub script: mlua::Function<'a>,
 }
 

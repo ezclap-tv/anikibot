@@ -5,9 +5,9 @@ pub mod util;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 
+use mlua::{UserData, UserDataMethods};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
-use mlua::{UserData, UserDataMethods};
 
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
@@ -72,7 +72,7 @@ impl<'lua> Bot<'lua> {
     pub fn get_api_storage(&self) -> APIStorage {
         APIStorage {
             streamelements: self.streamelements.clone(),
-            youtube_playlist: self.youtube_playlist.clone()
+            youtube_playlist: self.youtube_playlist.clone(),
         }
     }
 
@@ -81,12 +81,11 @@ impl<'lua> Bot<'lua> {
         self.config.gym_staff.contains(name)
     }
 
-    pub async fn run(mut self, dispatcher: Dispatcher) {
+    pub async fn run(mut self, lua: &mlua::Lua, dispatcher: Dispatcher) {
         let mut events = dispatcher.subscribe::<events::All>();
 
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
-        // I give up, how do you do this without a clone? LULW
         self.join_configured_channels(&ready.nickname).await;
 
         self.send(
@@ -98,7 +97,7 @@ impl<'lua> Bot<'lua> {
         while let Some(event) = events.next().await {
             match &*event {
                 messages::AllCommands::Privmsg(msg) => {
-                    self.handle_msg(msg).await;
+                    self.handle_msg(msg, lua).await;
                 }
                 _ => {}
             }
@@ -109,7 +108,7 @@ impl<'lua> Bot<'lua> {
         self.control.stop();
     }
 
-    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
+    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>, lua: &'lua mlua::Lua) {
         if !evt.data.starts_with("xD") {
             return;
         }
@@ -127,7 +126,24 @@ impl<'lua> Bot<'lua> {
 
         if evt.data.starts_with("xD reload ") && self.is_boss(&evt.name) {
             let _message = util::strip_prefix(&evt.data, "xD reload ");
-            // reload the command
+            match util::reload_command(&mut self.commands, _message, |cmd| {
+                util::load_file(&cmd.path)
+                    .and_then(|source| command::load_lua(&lua, _message, &source))
+                    .map(|script| cmd.script = script)
+                    .map_err(|e| e.inner)
+            }) {
+                Ok(_) => {
+                    self.send(
+                        &evt.channel,
+                        format!("👉 Successfully reloaded `{}`", _message),
+                    )
+                    .await
+                }
+                Err(e) => {
+                    log::info!("Failed to reload `{}`: {}", _message, e);
+                    self.send(&evt.channel, e.to_string()).await;
+                }
+            }
             return;
         }
 
@@ -179,15 +195,21 @@ impl<'lua> Bot<'lua> {
 
         let message = util::strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = util::find_command(&self.commands, message) {
+            let header = vec![evt.channel.to_string(), evt.name.to_string()];
             let args: mlua::Variadic<String> = if let Some(args) = args {
-                mlua::Variadic::from_iter(args.into_iter().map(|it| it.to_owned()))
+                mlua::Variadic::from_iter(
+                    header
+                        .into_iter()
+                        .chain(args.into_iter().map(|it| it.to_owned())),
+                )
             } else {
-                mlua::Variadic::new()
+                mlua::Variadic::from_iter(header.into_iter())
             };
             let response = (command.script)
                 .call_async::<mlua::Variadic<String>, String>(args)
                 .await;
             let response = match response {
+                Ok(resp) if resp.is_empty() => return,
                 Ok(response) => response,
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);

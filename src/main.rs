@@ -56,7 +56,7 @@ async fn main() {
     };
     init_globals(&lua, bot.get_api_storage());
 
-    let bot_done = bot.run(dispatcher);
+    let bot_done = bot.run(&lua, dispatcher);
 
     log::info!("Connecting to twitch...");
     let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();
