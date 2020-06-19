@@ -18,5 +18,9 @@
         "script": "scripts/song/queue.lua"
       }
     }
+  },
+  "ping": {
+    "usage": "Shows the bot uptime",
+    "script": "scripts/ping.lua"
   }
 }

@@ -1,6 +1,6 @@
 mod util;
 
-use crate::bot::{init_api_globals, APIStorage};
+use crate::bot::{init_api_globals, Bot};
 use mlua::{Lua, ToLua};
 use std::sync::atomic::{AtomicBool, Ordering};
 use util::init_util_globals;
@@ -37,7 +37,7 @@ static mut INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Initializes custom globals
 ///
 /// Panics if called more than once
-pub fn init_globals<'a>(lua: &'a mlua::Lua, api: APIStorage) {
+pub fn init_globals<'a>(lua: &'a mlua::Lua, bot: &'a Bot<'a>) {
     unsafe {
         if INITIALIZED.load(Ordering::Acquire) {
             panic!("Globals initialized more than once");
@@ -46,5 +46,5 @@ pub fn init_globals<'a>(lua: &'a mlua::Lua, api: APIStorage) {
     }
 
     init_util_globals(lua);
-    init_api_globals(lua, api);
+    init_api_globals(lua, bot.get_api_storage(), bot.get_bot_info());
 }

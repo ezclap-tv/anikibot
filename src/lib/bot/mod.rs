@@ -66,6 +66,10 @@ impl<'lua> Bot<'lua> {
         }
     }
 
+    pub fn get_bot_info(&self) -> BotInfo {
+        BotInfo { start: self.start }
+    }
+
     pub fn get_api_storage(&self) -> APIStorage {
         APIStorage {
             streamelements: self.streamelements.clone(),
@@ -240,9 +244,25 @@ impl<'lua> Bot<'lua> {
     }
 }
 
-pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage) {
-    if let Err(e) = lua.globals().set("api", api) {
-        log::error!("Failed to set global object \"api\": {}", e);
+pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage, bot: BotInfo) {
+    let globals = lua.globals();
+    if let Err(e) = globals.set("api", api) {
+        panic!(format!("{}", e));
+    }
+    if let Err(e) = globals.set("bot", bot) {
+        panic!(format!("{}", e));
+    }
+}
+
+pub struct BotInfo {
+    pub start: chrono::DateTime<chrono::Utc>,
+}
+
+impl UserData for BotInfo {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("uptime", |_, instance, ()| {
+            Ok(util::duration_format(chrono::Utc::now() - instance.start))
+        });
     }
 }
 

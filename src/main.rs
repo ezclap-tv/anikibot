@@ -54,7 +54,7 @@ async fn main() {
 
         builder.build(&lua)
     };
-    init_globals(&lua, bot.get_api_storage());
+    init_globals(&lua, &bot);
 
     let bot_done = bot.run(&lua, dispatcher);
 
