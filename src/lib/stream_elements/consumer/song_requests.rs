@@ -1,9 +1,11 @@
 //! Implements the API methods from the [`StreamElement's API reference`].
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
-use mlua::{Lua, ToLua, UserData, UserDataMethods};
-use crate::stream_elements::communication::{APIRequestKind, APIResponse, APIResponseMessage, RequestSender};
 use crate::lua::JsonValue;
+use crate::stream_elements::communication::{
+    APIRequestKind, APIResponse, APIResponseMessage, RequestSender,
+};
+use mlua::{Lua, ToLua, UserData, UserDataMethods};
 
 /// Implements the `SongRequest` API methods.
 #[derive(Clone)]
@@ -88,42 +90,67 @@ impl SongRequests {
     }
 }
 
-fn handle_api_response<'lua>(lua: &'lua Lua, response: APIResponse) -> mlua::Result<(mlua::Value, mlua::Value)> {
+fn handle_api_response<'lua>(
+    lua: &'lua Lua,
+    response: APIResponse,
+) -> mlua::Result<(mlua::Value, mlua::Value)> {
     match response {
         Ok(response) => match response {
             APIResponseMessage::Json(json) => Ok((JsonValue(json).to_lua(lua)?, mlua::Nil)),
-            APIResponseMessage::Str(str) => Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
+            APIResponseMessage::Str(str) => {
+                Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
+            }
         },
-        Err(err) => Ok((mlua::Nil, mlua::Value::String(lua.create_string(&format!("{}", err))?)))
+        Err(err) => Ok((
+            mlua::Nil,
+            mlua::Value::String(lua.create_string(&format!("{}", err))?),
+        )),
     }
 }
 
 impl UserData for SongRequests {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-
         methods.add_async_method("get_settings", |lua, instance, ()| async move {
             handle_api_response(lua, instance.get_settings().await)
         });
-        methods.add_async_method("get_public_settings", |lua, instance, channel_id: String| async move {
-            handle_api_response(lua, instance.get_public_settings(channel_id).await)
-        });
+        methods.add_async_method(
+            "get_public_settings",
+            |lua, instance, channel_id: String| async move {
+                handle_api_response(lua, instance.get_public_settings(channel_id).await)
+            },
+        );
         methods.add_async_method("current_song", |lua, instance, ()| async move {
             handle_api_response(lua, instance.current_song().await)
         });
         methods.add_async_method("current_song_title", |lua, instance, ()| async move {
             handle_api_response(lua, instance.current_song_title().await)
         });
-        methods.add_async_method("queue_song_in_channel", |lua, instance, (channel_id, song_url): (String, String)| async move {
-            handle_api_response(lua, instance.queue_song_in_channel(channel_id, song_url).await)
-        });
+        methods.add_async_method(
+            "queue_song_in_channel",
+            |lua, instance, (channel_id, song_url): (String, String)| async move {
+                handle_api_response(
+                    lua,
+                    instance.queue_song_in_channel(channel_id, song_url).await,
+                )
+            },
+        );
         methods.add_async_method("queue", |lua, instance, song_url: String| async move {
             handle_api_response(lua, instance.queue(song_url).await)
         });
-        methods.add_async_method("queue_many_in_channel", |lua, instance, (channel_id, song_urls): (String, Vec<String>)| async move {
-            handle_api_response(lua, instance.queue_many_in_channel(channel_id, song_urls).await)
-        });
-        methods.add_async_method("queue_many", |lua, instance, song_urls: Vec<String>| async move {
-            handle_api_response(lua, instance.queue_many(song_urls).await)
-        });
+        methods.add_async_method(
+            "queue_many_in_channel",
+            |lua, instance, (channel_id, song_urls): (String, Vec<String>)| async move {
+                handle_api_response(
+                    lua,
+                    instance.queue_many_in_channel(channel_id, song_urls).await,
+                )
+            },
+        );
+        methods.add_async_method(
+            "queue_many",
+            |lua, instance, song_urls: Vec<String>| async move {
+                handle_api_response(lua, instance.queue_many(song_urls).await)
+            },
+        );
     }
 }

@@ -25,6 +25,7 @@ fn transform<'a>(
         let data: Option<CommandData> = if command.usage.is_some() && command.script.is_some() {
             Some(CommandData {
                 usage: command.usage.unwrap(),
+                is_expensive: command.is_expensive.unwrap_or_else(|| false),
                 path: command.script.as_ref().unwrap().clone(),
                 script: util::load_file(command.script.as_ref().unwrap())
                     .and_then(|source| load_lua(&lua, &name, &source))
@@ -65,6 +66,7 @@ pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> HashMap<String, Comm
 #[derive(Deserialize)]
 struct CommandJSON {
     pub usage: Option<String>,
+    pub is_expensive: Option<bool>,
     pub script: Option<String>,
     pub commands: Option<HashMap<String, CommandJSON>>,
 }
@@ -72,6 +74,7 @@ struct CommandJSON {
 #[derive(Clone)]
 pub struct CommandData<'a> {
     pub usage: String,
+    pub is_expensive: bool,
     pub path: String,
     pub script: mlua::Function<'a>,
 }

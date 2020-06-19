@@ -17,14 +17,25 @@ impl UserData for Util {
             table.set("channel", va[0].clone())?;
             table.set("user", va[1].clone())?;
 
-            for i in 2..va.len() {
-                table.set(i, va[i].clone())?;
+            for i in 0..(va.len() - 2) {
+                table.set(i, va[i + 2].clone())?;
             }
 
             Ok(table)
         });
+        methods.add_method("len", |_, _, table: mlua::Table| Ok(table.len()));
         methods.add_method("info", |_, _, va: Variadic<mlua::Value<'lua>>| {
             log::info!(
+                "[ LUA ] {}",
+                va.into_iter()
+                    .map(|v| lua_value_to_string(&v, true))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            Ok(())
+        });
+        methods.add_method("error", |_, _, va: Variadic<mlua::Value<'lua>>| {
+            log::error!(
                 "[ LUA ] {}",
                 va.into_iter()
                     .map(|v| lua_value_to_string(&v, true))

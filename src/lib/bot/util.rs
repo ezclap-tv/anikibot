@@ -3,6 +3,22 @@ use crate::{BackendError, BoxedError};
 use serde::Deserialize;
 use serde_json::from_str;
 use std::collections::HashMap;
+use std::iter::FromIterator;
+
+pub fn format_args(
+    evt: &twitchchat::messages::Privmsg,
+    args: Option<Vec<&str>>,
+) -> mlua::Variadic<String> {
+    let header = vec![evt.channel.to_string(), evt.name.to_string()];
+    match args {
+        Some(args) => mlua::Variadic::from_iter(
+            header
+                .into_iter()
+                .chain(args.into_iter().map(|it| it.to_owned())),
+        ),
+        None => mlua::Variadic::from_iter(header.into_iter()),
+    }
+}
 
 pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
     if !str.starts_with(prefix) {

@@ -15,15 +15,14 @@
 //!     println!("My id is {}", api.channel().my_id().await.unwrap());
 //! }
 //! ```
-use reqwest::{
-    header::{HeaderMap, HeaderValue},
-    Client, Error as ReqwestError, RequestBuilder,
-};
-
 use super::channels::Channels;
 use super::{
     communication::spawn_api_thread, config::StreamElementsConfig,
     consumer::ConsumerStreamElementsAPI, song_requests::SongRequests,
+};
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client, Error as ReqwestError, RequestBuilder,
 };
 use tokio::runtime;
 

@@ -1,16 +1,22 @@
 {
-    "test": {
-        "usage": "Test command",
-        "script": "scripts/test.lua",
-        "commands": {
-            "sub": {
-                "usage": "Test subcommand",
-                "script": "scripts/test/sub.lua"
-            }
-        }
-    },
-    "song": {
-        "usage": "Shows the currently playing song title and link",
-        "script": "scripts/song.lua"
+  "test": {
+    "usage": "Test command",
+    "script": "scripts/test.lua",
+    "commands": {
+      "sub": {
+        "usage": "Test subcommand",
+        "script": "scripts/test/sub.lua"
+      }
     }
+  },
+  "song": {
+    "usage": "Shows the currently playing song title and link",
+    "script": "scripts/song.lua",
+    "commands": {
+      "queue": {
+        "usage": "song queue [playlist link] [song count : optional]. Queues songs to the streamelements media request queue",
+        "script": "scripts/song/queue.lua"
+      }
+    }
+  }
 }

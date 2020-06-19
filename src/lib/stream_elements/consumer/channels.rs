@@ -2,9 +2,11 @@
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
 
-use mlua::{Lua, ToLua, UserData, UserDataMethods};
-use crate::stream_elements::communication::{APIResponseMessage, APIRequestKind, APIResponse, RequestSender};
 use crate::lua::JsonValue;
+use crate::stream_elements::communication::{
+    APIRequestKind, APIResponse, APIResponseMessage, RequestSender,
+};
+use mlua::{Lua, ToLua, UserData, UserDataMethods};
 
 /// Implements the `channels` API methods.
 #[derive(Clone)]
@@ -39,20 +41,26 @@ impl Channels {
     }
 }
 
-fn handle_api_response<'lua>(lua: &'lua Lua, response: APIResponse) -> Result<(mlua::Value, mlua::Value), mlua::Error> {
+fn handle_api_response<'lua>(
+    lua: &'lua Lua,
+    response: APIResponse,
+) -> Result<(mlua::Value, mlua::Value), mlua::Error> {
     match response {
         Ok(response) => match response {
             APIResponseMessage::Json(json) => Ok((JsonValue(json).to_lua(lua)?, mlua::Nil)),
-            APIResponseMessage::Str(str) => Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
+            APIResponseMessage::Str(str) => {
+                Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
+            }
         },
-        Err(err) => Ok((mlua::Nil, mlua::Value::String(lua.create_string(&format!("{}", err))?)))
+        Err(err) => Ok((
+            mlua::Nil,
+            mlua::Value::String(lua.create_string(&format!("{}", err))?),
+        )),
     }
 }
 
 impl UserData for Channels {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        
-
         methods.add_async_method("me", |lua, instance, _: ()| async move {
             handle_api_response(lua, instance.me().await)
         });

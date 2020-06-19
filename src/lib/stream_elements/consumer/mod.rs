@@ -1,4 +1,3 @@
-
 use mlua::{UserData, UserDataMethods};
 
 use super::communication::RequestSender;
@@ -31,9 +30,7 @@ impl ConsumerStreamElementsAPI {
 
 impl UserData for ConsumerStreamElementsAPI {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method("channels", |_, instance, ()| {
-            Ok(instance.channels())
-        });
+        methods.add_method("channels", |_, instance, ()| Ok(instance.channels()));
         methods.add_method("song_requests", |_, instance, ()| {
             Ok(instance.song_requests())
         });

@@ -2,17 +2,14 @@ pub mod command;
 pub mod config;
 pub mod util;
 
-use std::collections::HashMap;
-use std::iter::FromIterator;
-
-use mlua::{UserData, UserDataMethods};
-use tokio::stream::StreamExt as _;
-use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
-
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
 use command::{load_commands, Command};
+use mlua::{UserData, UserDataMethods};
+use std::collections::HashMap;
+use tokio::stream::StreamExt as _;
+use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
 /* Previously had commands: ping, ping uptime, whoami, song, song queue */
 
@@ -140,8 +137,9 @@ impl<'lua> Bot<'lua> {
                     .await
                 }
                 Err(e) => {
-                    log::info!("Failed to reload `{}`: {}", _message, e);
-                    self.send(&evt.channel, e.to_string()).await;
+                    log::error!("Failed to reload `{}`: {}", _message, e);
+                    self.send(&evt.channel, format!("WAYTOODANK ❗❗ something broke"))
+                        .await;
                 }
             }
             return;
@@ -149,35 +147,6 @@ impl<'lua> Bot<'lua> {
 
         // Not the most clean and fragrant piece code
         // but demonstrates the usage of tokio::spawn.
-        if evt.data.starts_with("xD queue") && self.is_boss(&evt.name) {
-            let parts: Vec<String> = evt
-                .data
-                .split_whitespace()
-                .skip(2)
-                .map(String::from)
-                .collect();
-            let yt = self.youtube_playlist.clone().unwrap();
-            let se = self.streamelements.clone().unwrap();
-            tokio::spawn(async move {
-                let id = parts.first().unwrap();
-                let num = parts.last().unwrap().parse::<usize>().unwrap();
-                yt.configure(id.to_owned(), num).await.unwrap();
-                let song_urls = yt
-                    .get_playlist_videos()
-                    .await
-                    .unwrap()
-                    .into_videos()
-                    .unwrap()
-                    .into_iter()
-                    .map(|v| v.into_url())
-                    .collect();
-                log::trace!(
-                    "{:?}",
-                    se.song_requests().queue_many(song_urls).await.unwrap()
-                );
-            });
-            return;
-        }
 
         if evt.data.starts_with("xD help ") {
             let name = util::strip_prefix(&evt.data, "xD help ");
@@ -195,28 +164,32 @@ impl<'lua> Bot<'lua> {
 
         let message = util::strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = util::find_command(&self.commands, message) {
-            let header = vec![evt.channel.to_string(), evt.name.to_string()];
-            let args: mlua::Variadic<String> = if let Some(args) = args {
-                mlua::Variadic::from_iter(
-                    header
-                        .into_iter()
-                        .chain(args.into_iter().map(|it| it.to_owned())),
-                )
+            // TODO: make lua state Arc<RwLock<Lua>>
+            // so that we can send mlua::Function between threads
+            // enabling us to spawn tasks for expensive commands
+            /*
+            if command.is_expensive {
+                // spawn task for command
             } else {
-                mlua::Variadic::from_iter(header.into_iter())
-            };
-            let response = (command.script)
-                .call_async::<mlua::Variadic<String>, String>(args)
-                .await;
-            let response = match response {
-                Ok(resp) if resp.is_empty() => return,
-                Ok(response) => response,
+                // execute the command here
+            }
+            */
+            let response = match command
+                .script
+                .clone()
+                .call_async::<mlua::Variadic<String>, Option<String>>(util::format_args(evt, args))
+                .await
+            {
+                Ok(resp) if resp.is_none() => {
+                    return;
+                }
+                Ok(resp) => resp.unwrap(),
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);
                     format!("WAYTOODANK devs broke something!")
                 }
             };
-            self.send(&evt.channel, response).await;
+            self.send(&evt.channel.clone(), response).await;
         }
     }
 

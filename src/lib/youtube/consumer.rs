@@ -1,6 +1,6 @@
-use mlua::{ToLua, Lua, UserData, UserDataMethods};
 use super::communication::{APIRequestKind, APIResponse, RequestSender};
-use crate::lua::{JsonValue};
+use crate::lua::JsonValue;
+use mlua::{Lua, ToLua, UserData, UserDataMethods};
 
 #[derive(Debug, Clone)]
 pub struct ConsumerYouTubePlaylistAPI {
@@ -56,11 +56,13 @@ impl ConsumerYouTubePlaylistAPI {
     }
 }
 
-fn handle_api_response<'lua>(lua: &'lua Lua, response: APIResponse) -> mlua::Result<(mlua::Value, mlua::Value)> {
+fn handle_api_response<'lua>(
+    lua: &'lua Lua,
+    response: APIResponse,
+) -> mlua::Result<(mlua::Value, mlua::Value)> {
     match response {
         Ok(response) => match response {
             super::communication::APIResponseMessage::Done => {
-                
                 Ok((lua_str!(lua, "Done"), mlua::Value::Nil))
             }
             super::communication::APIResponseMessage::Number(n) => {
@@ -84,16 +86,22 @@ fn handle_api_response<'lua>(lua: &'lua Lua, response: APIResponse) -> mlua::Res
                 let table = lua.create_sequence_from(v.into_iter().map(|v| v.into_url()))?;
                 Ok((mlua::Value::Table(table), mlua::Value::Nil))
             }
-        }
-        Err(error) => Ok((mlua::Nil, mlua::Value::String(lua.create_string(&format!("{}", error))?)))
+        },
+        Err(error) => Ok((
+            mlua::Nil,
+            mlua::Value::String(lua.create_string(&format!("{}", error))?),
+        )),
     }
 }
 
 impl UserData for ConsumerYouTubePlaylistAPI {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_async_method("configure", |lua, instance, (playlist_id, page_size): (String, usize)| async move {
-            handle_api_response(lua, instance.configure(playlist_id, page_size).await)
-        });
+        methods.add_async_method(
+            "configure",
+            |lua, instance, (playlist_id, page_size): (String, usize)| async move {
+                handle_api_response(lua, instance.configure(playlist_id, page_size).await)
+            },
+        );
         methods.add_async_method("get_config", |lua, instance, ()| async move {
             handle_api_response(lua, instance.get_config().await)
         });
