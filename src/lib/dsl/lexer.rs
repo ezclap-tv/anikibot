@@ -32,6 +32,9 @@ pub enum TokenKind<'a> {
     #[token("...")]
     Ellipsis,
 
+    #[token("@")]
+    Variadics,
+
     #[token(";")]
     Semicolon,
 

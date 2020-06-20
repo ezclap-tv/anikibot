@@ -1,0 +1,2 @@
+let args = util:get_args(@);
+return f"test: {args.length} args. first arg = {args[0]}";

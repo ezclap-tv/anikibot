@@ -1,0 +1,6 @@
+let response, error = api:streamelements():song_requests():current_song();
+if error != nil {
+    return "WAYTOODANK something broke";
+}
+
+return f"CheemJam now playing {response.title} [ https://youtu.be/{response.videoId} ]";

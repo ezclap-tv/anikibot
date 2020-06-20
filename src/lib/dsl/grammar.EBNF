@@ -14,7 +14,7 @@ statement ::= var_decl
 block      ::=  "{" statement* "}" 
              ;
 fn_decl    ::= "fn" IDENTIFIER "(" params? ")" body ;
-var_decl   ::= ( "let" | "global" ) IDENTIFIER ( "=" expression )? ";" ;
+var_decl   ::= ( "let" | "global" ) ( IDENTIFIER )+ ( "=" expression )? ";" ;
 if_stmt    ::= "if" expression block ( else ( if_stmt | block ) )?;
 for_stmt   ::= ( "for" | "fori" ) IDENTIFIER ("," IDENTIFIER )* "in" ( range | arguments ) block ;
 while_stmt ::= "while" expression block;
@@ -45,6 +45,7 @@ primary        ::= "nil"
                 | FSTRING
                 | STRING
                 | IDENTIFIER
+                | VARIADICS
                 | "(" expression ")" 
                 | "[" arguments? "]"
                 | "{" pairs? "}"
@@ -58,5 +59,6 @@ arguments  ::= expression ( "," expression)* ( "," )? ;
 pairs      ::= pair ("," pair )* ( "," )? ;
 pair       ::= expr "=" expr ;
 
-IDENTIFIER := < [a-zA-Z_][a-zA-Z0-9_]* >;
-EOF ::= <END OF FILE> ;
+VARIADICS  ::= "@" ;
+IDENTIFIER ::= < [a-zA-Z_][a-zA-Z0-9_]* >;
+EOF        ::= <END OF FILE> ;

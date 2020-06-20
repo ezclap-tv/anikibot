@@ -135,15 +135,20 @@ impl<'a> Parser<'a> {
             r#fn.name = Some(name.lexeme);
             return Ok(stmt!(self, StmtKind::FuncDecl(kind, Ptr::new(r#fn))));
         }
-        let ident = self.consume_identifier("Expected a variable name after the keyword.")?;
+        let mut names =
+            vec![self.consume_identifier("Expected a variable name after the keyword.")?];
+        while self.r#match(TokenKind::Comma) {
+            names.push(self.consume_identifier("Expected a variable name after the comma.")?);
+        }
 
         let initializer = if self.r#match(TokenKind::Equal) {
             Some(Ptr::new(self.expression()?))
         } else {
             if kind == VarKind::Global {
+                let ident = names.first().unwrap();
                 self.ex.record(ParseError::new(
                     ident.line,
-                    ident.span,
+                    ident.span.clone(),
                     "Global variables must be assigned a value",
                 ));
             }
@@ -153,7 +158,12 @@ impl<'a> Parser<'a> {
 
         Ok(stmt!(
             self,
-            StmtKind::VarDecl(kind, ident.lexeme, initializer)
+            StmtKind::VarDecl(
+                kind,
+                // XXX: Should we lint using varidics in var declarations?
+                names.into_iter().map(|n| n.lexeme).collect(),
+                initializer
+            )
         ))
     }
 
@@ -526,6 +536,7 @@ impl<'a> Parser<'a> {
                 )
             ),
             TokenKind::Identifier => expr!(self, ExprKind::Variable(token.lexeme)),
+            TokenKind::Variadics => expr!(self, ExprKind::Variable("...")),
             TokenKind::EOLSeq(n) => {
                 self.bump_line(n);
                 expr!(self, ExprKind::NewLine)
@@ -737,7 +748,11 @@ impl<'a> Parser<'a> {
 
     #[inline]
     fn consume_identifier<S: Into<String>>(&mut self, msg: S) -> Result<Token<'a>, ParseError> {
-        self.consume(TokenKind::Identifier, msg)
+        if self.check(&TokenKind::Variadics) {
+            self.consume(TokenKind::Variadics, msg)
+        } else {
+            self.consume(TokenKind::Identifier, msg)
+        }
     }
 
     fn consume_semicolon<S: Into<String>>(&mut self, msg: S) -> Result<Token<'a>, ParseError> {

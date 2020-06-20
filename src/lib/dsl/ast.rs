@@ -72,7 +72,7 @@ pub enum StmtKind<'a> {
     ExprStmt(ExprPtr<'a>),
     Assignment(ExprPtr<'a>, &'a str, ExprPtr<'a>),
     FuncDecl(VarKind, Ptr<Function<'a>>),
-    VarDecl(VarKind, &'a str, Option<ExprPtr<'a>>),
+    VarDecl(VarKind, Vec<&'a str>, Option<ExprPtr<'a>>),
     Break,
     NewLine(usize),
 }

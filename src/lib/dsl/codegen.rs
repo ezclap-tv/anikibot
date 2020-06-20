@@ -142,7 +142,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
         StmtKind::FuncDecl(kind, r#fn) => {
             code.push_and_pad(fn_to_lua(r#fn, *kind, depth), depth);
         }
-        StmtKind::VarDecl(kind, name, value) => {
+        StmtKind::VarDecl(kind, names, value) => {
             code.push_and_pad(
                 format!(
                     "{}{}{}",
@@ -150,7 +150,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                         VarKind::Local => "local ",
                         VarKind::Global => "",
                     },
-                    name,
+                    names.join(", "),
                     match value {
                         Some(ref expr) => format!(" = {}", expr_to_lua(expr, depth)),
                         None => String::new(),

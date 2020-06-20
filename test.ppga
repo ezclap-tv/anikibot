@@ -2,7 +2,7 @@
     A multi-line comment
 */
 // static methods still require a colon (getting rid of this would require a type system).
-let args = util:get_args();
+let args = util:get_args(@);
 
 let a =  -1;
 let b = 2 + 2;
