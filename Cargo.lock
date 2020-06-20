@@ -31,6 +31,7 @@ dependencies = [
  "better-panic",
  "chrono",
  "config",
+ "lazy_static",
  "log",
  "logos",
  "mlua",
