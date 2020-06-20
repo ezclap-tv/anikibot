@@ -1,4 +1,5 @@
 target
 .vscode
+.vscode/
 secrets.toml
 *.vsix
