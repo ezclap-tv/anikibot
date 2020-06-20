@@ -14,7 +14,7 @@ use errors::ErrCtx;
 use frontend::{lexer, Parser};
 
 pub fn ppga_to_lua<'a>(source: &'a str, config: PPGAConfig) -> Result<String, ErrCtx<'a>> {
-    Parser::with_config(config, lexer(source))
+    Parser::with_config(config, lexer(source.trim_end()))
         .parse()
         .map(|ast| emit_lua(&ast))
 }

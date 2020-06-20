@@ -105,9 +105,13 @@ pub enum TokenKind<'a> {
     Fn,
 
     /// A `?`. Used to indicate that an argument is optional or
-    // to automatically unpack let statements initialized with an ok/err pair.
+    /// to automatically unpack let statements initialized with an ok/err pair.
     #[token("?")]
     Query,
+
+    /// The default value operator: `??`. Evaluates the second operand if the first operand is `nil`.
+    #[token("??")]
+    DoubleQuery,
 
     /// The `let` keyword. Used for local variable definitions.
     #[token("let")]

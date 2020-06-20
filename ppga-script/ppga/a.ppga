@@ -1,22 +1,10 @@
-// test
 fn some_api_request() {
-    return "ok", nil
+    return "ok", nil;
 }
 
-fn map_err(res, f) {
-    let ok, err = res;
-    if err != nil { err = f(err); }
-    return (ok), (err);
-}
+// let ok = some_api_request()?;
+// print(f"ok: {ok}");
 
-let ok = map_err(some_api_request(), fn(_) {
-    return "WAYTOODANK something broke";
-})?;
-
-if err != nil {
-  util:error(err);
-  return "WAYTOODANK something broke";
-}
-
-
-let ok = some_api_request()?;
+let val = nil;
+let res = val ?? 42;
+print(f"res: {res}");

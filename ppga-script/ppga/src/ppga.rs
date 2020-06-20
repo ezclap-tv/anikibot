@@ -2,14 +2,14 @@ extern crate ppga;
 
 use std::env;
 
-use ppga::ppga_to_lua;
+use ppga::{ppga_to_lua, PPGAConfig};
 
 type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 pub fn main() -> Result<(), BoxedError> {
     let args: Vec<String> = env::args().collect();
     let mut output = None;
-    let mut disable_comments: bool = true;
+    let mut config = PPGAConfig::default();
 
     if args.len() < 2 {
         eprintln!("Error: Missing a ppga script path.");
@@ -19,7 +19,7 @@ pub fn main() -> Result<(), BoxedError> {
         output = Some(args[2].clone());
     }
     if args.iter().find(|a| *a == "-c").is_some() {
-        disable_comments = false;
+        config.emit_comments = true;
     }
 
     println!("--> File `{}`", args[1]);
@@ -27,7 +27,7 @@ pub fn main() -> Result<(), BoxedError> {
     let lua = std::fs::read_to_string(&args[1])
         .map_err(BoxedError::from)
         .and_then(|source| {
-            ppga_to_lua(&source, !disable_comments).map_err(|e| {
+            ppga_to_lua(&source, config).map_err(|e| {
                 eprintln!("Failed to transpile the script:\n{}", e.report_to_string());
                 BoxedError::from("")
             })

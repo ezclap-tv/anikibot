@@ -11,10 +11,14 @@ pub struct PPGAConfig {
     pub emit_comments: bool,
     /// The number of indentation spaces in the resulting lua code.
     pub indent_size: usize,
+    /// Specifies whether to include PPGAs standard library symbols.
+    /// They are required for some of PPGAs features to work (for example, the `??` and `?` operators).
+    pub include_ppga_std: bool,
 }
 
 impl Default for PPGAConfig {
-    /// Creates a [`PPGAConfig`] with an ident size of [`DEFAULT_INDENT_SIZE`] and comments turned off.
+    /// Creates a [`PPGAConfig`] with an ident size of [`DEFAULT_INDENT_SIZE`], comments turned off,
+    /// and standard symbols included.
     ///
     /// [`PPGAConfig`]: crate::config::PPGAConfig
     /// [`DEFAULT_INDENT_SIZE`]: crate::codegen::code_builder::DEFAULT_INDENT_SIZE
@@ -22,6 +26,7 @@ impl Default for PPGAConfig {
         Self {
             emit_comments: false,
             indent_size: DEFAULT_INDENT_SIZE,
+            include_ppga_std: true,
         }
     }
 }

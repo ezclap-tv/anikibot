@@ -15,5 +15,6 @@
 //! ```
 pub mod code_builder;
 pub mod codegen;
+pub mod snippets;
 
 pub use codegen::{emit_lua, expr_to_lua, fn_to_lua, stmt_to_lua};

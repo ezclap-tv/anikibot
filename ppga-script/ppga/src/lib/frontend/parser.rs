@@ -2,7 +2,7 @@
 use logos::Lexer as RawLexer;
 
 use super::{super::errors::*, ast::*, lexer::*};
-use crate::PPGAConfig;
+use crate::{codegen::snippets::DEFAULT_OP_NAME, PPGAConfig};
 
 /// The lexer type expected by the parser.
 pub type Lexer<'a> = RawLexer<'a, TokenKind<'a>>;
@@ -116,7 +116,6 @@ impl<'a> Parser<'a> {
                 TokenKind::EOLSeq(n) => n,
                 _ => unreachable!("{:#?}", self.previous()),
             };
-            self.bump_line(n);
             Ok(stmt!(self, StmtKind::NewLine(if n < 2 { 0 } else { 1 })))
         } else {
             let stmt = self.assignment()?;
@@ -164,7 +163,7 @@ impl<'a> Parser<'a> {
             }
             None
         };
-        self.consume_semicolon("Expected a `;` after the var declaration")?;
+        self.consume_semicolon("Expected a `;` after the variable declaration")?;
 
         Ok(stmt!(
             self,
@@ -330,7 +329,7 @@ impl<'a> Parser<'a> {
         if self.r#match(TokenKind::Fn) {
             Ok(expr!(self, ExprKind::Lambda(Ptr::new(self.lambda()?))))
         } else {
-            self.logic_or()
+            self.default_op()
         }
     }
 
@@ -372,6 +371,23 @@ impl<'a> Parser<'a> {
             params,
             body,
         })
+    }
+
+    fn default_op(&mut self) -> ExprRes<'a> {
+        let mut expr = self.logic_or()?;
+
+        if self.r#match(TokenKind::DoubleQuery) {
+            let right = self.logic_or()?;
+            expr = expr!(
+                self,
+                ExprKind::Call(
+                    Ptr::new(expr!(sf, ExprKind::Variable(DEFAULT_OP_NAME))),
+                    vec![expr, right]
+                )
+            );
+        }
+
+        Ok(expr)
     }
 
     fn logic_or(&mut self) -> ExprRes<'a> {
@@ -893,16 +909,21 @@ impl<'a> Parser<'a> {
     }
 
     fn advance_and_skip_newlines(&mut self) -> Token<'a> {
-        if self.current.kind == TokenKind::EOL {
-            // QQQ: do we even need this while loop? Only single EOLS can appear by themselves
-            //      so this loop seems to be redundant.
-            while self.current.kind == TokenKind::EOL {
-                self.bump_line(1);
-                self.actual_advance();
+        match self.current.kind {
+            TokenKind::EOL => {
+                // QQQ: do we even need this while loop? Only single EOLS can appear by themselves
+                //      so this loop seems to be redundant.
+                while self.current.kind == TokenKind::EOL {
+                    self.bump_line(1);
+                    self.actual_advance();
+                }
+                self.previous.clone()
             }
-            self.previous.clone()
-        } else {
-            self.actual_advance().clone()
+            TokenKind::EOLSeq(n) => {
+                self.bump_line(n);
+                self.actual_advance().clone()
+            }
+            _ => self.actual_advance().clone(),
         }
     }
 

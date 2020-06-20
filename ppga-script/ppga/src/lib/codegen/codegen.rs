@@ -13,6 +13,7 @@
 //!     return (5)
 //! end"#);
 //! ```
+use crate::codegen::snippets::SNIPPETS;
 use crate::{codegen::code_builder::*, config::PPGAConfig, frontend::ast::*};
 
 /// Transpiles the given AST object into Lua.
@@ -30,6 +31,13 @@ use crate::{codegen::code_builder::*, config::PPGAConfig, frontend::ast::*};
 /// ```
 pub fn emit_lua<'a>(ast: &AST<'a>) -> String {
     let mut code = CodeBuilder::new(ast.config.indent_size);
+    if ast.config.include_ppga_std {
+        code.push("-- PPGA STD SYMBOLS");
+        for snippet in SNIPPETS.iter() {
+            code.push(snippet.to_owned());
+        }
+        code.push("-- END PPGA STD SYMBOLS\n\n");
+    }
     for stmt in &ast.stmts {
         code.push(stmt_to_lua(&stmt, &ast.config, 0).trim_end());
     }
