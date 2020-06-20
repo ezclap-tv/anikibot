@@ -1,0 +1,551 @@
+{
+	"name": "PepegaScript",
+	"scopeName": "source.ppga",
+	"keyEquivalent": "^~P",
+	"fileTypes": ["ppga"],
+	"patterns": [{
+		"include": "#general"
+	}],
+	"repository": {
+		"general": {
+			"patterns": [{
+					"include": "#line-comment"
+				},
+				{
+					"include": "#block-comment"
+				},
+				{
+					"include": "#number"
+				},
+				{
+					"include": "#constant"
+				},
+				{
+					"include": "#f-string"
+				},
+				{
+					"include": "#single-quote-string"
+				},
+				{
+					"include": "#double-quote-string"
+				},
+				{
+					"include": "#if-block"
+				},
+				{
+					"include": "#for-block"
+				},
+				{
+					"include": "#while-block"
+				},
+				{
+					"include": "#logic-operator"
+				},
+				{
+					"include": "#operator"
+				},
+				{
+					"include": "#keyword"
+				},
+				{
+					"include": "#table-function"
+				},
+				{
+					"include": "#function"
+				},
+				{
+					"include": "#anonymous-function"
+				},
+				{
+					"include": "#support-function-call"
+				},
+				{
+					"include": "#support-string-function-call"
+				},
+				{
+					"include": "#function-call"
+				},
+				{
+					"include": "#string-function-call"
+				},
+				{
+					"include": "#table"
+				},
+				{
+					"include": "#array"
+				},
+				{
+					"include": "#table-property"
+				},
+				{
+					"include": "#language-variable"
+				},
+				{
+					"include": "#support-variable"
+				},
+				{
+					"include": "#variable"
+				}
+			]
+		},
+		"expression": {
+			"patterns": [{
+					"include": "#constant"
+				},
+				{
+					"include": "#variable"
+				},
+				{
+					"include": "#function-call"
+				},
+				{
+					"include": "#anonymous-function"
+				},
+				{
+					"include": "#keyword"
+				},
+				{
+					"include": "#logic-operator"
+				},
+				{
+					"include": "#operator"
+				},
+				{
+					"include": "#number"
+				},
+				{
+					"include": "#table-property"
+				},
+				{
+					"include": "#language-variable"
+				},
+				{
+					"include": "#support-function-call"
+				},
+				{
+					"include": "#support-string-function-call"
+				},
+				{
+					"include": "#function-call"
+				},
+				{
+					"include": "#string-function-call"
+				}
+			]
+		},
+		"line-comment": {
+			"name": "comment.line.double-slash.ppg",
+			"begin": "(\\/\\/)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.definition.comment.ppga"
+				}
+			},
+			"end": "(?:\\n|$)"
+		},
+		"block-comment": {
+			"name": "comment.block.ppga",
+			"begin": "(\\/\\*)",
+			"beginCaptures": {
+				"1": {
+					"name": "punctuation.definition.comment.ppga"
+				}
+			},
+			"end": "(\\*\\/)",
+			"endCaptures": {
+				"1": {
+					"name": "punctuation.definition.comment.ppga"
+				}
+			}
+		},
+		"constant": {
+			"name": "constant.language.ppga",
+			"match": "\\b(nil|true|false|_G|_VERSION|@)\\b"
+		},
+		"number": {
+			"name": "constant.numeric.ppga",
+			"match": "(?<![\\d.])\\b0x[a-fA-F\\d]+|\\b\\d+(\\.\\d+)?([eE]-?\\d+)?|\\.\\d+([eE]-?\\d+)?"
+		},
+		"single-quote-string": {
+			"name": "string.quoted.single.ppga",
+			"begin": "'",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.begin.ppga"
+				}
+			},
+			"end": "'",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.end.ppga"
+				}
+			},
+			"patterns": [{
+				"match": "\\\\(\\d{1,3}|.)",
+				"name": "constant.character.escape.ppga"
+			}]
+		},
+		"double-quote-string": {
+			"name": "string.quoted.double.ppga",
+			"begin": "\"",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.begin.ppga"
+				}
+			},
+			"end": "\"",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.end.ppga"
+				}
+			},
+			"patterns": [{
+				"match": "\\\\(\\d{1,3}|.)",
+				"name": "constant.character.escape.ppga"
+			}]
+		},
+		"f-string": {
+			"name": "string.interpolated.double.ppga",
+			"begin": "f\"",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.begin.ppga"
+				}
+			},
+			"end": "(\")|((?:[^\\\\\\n])$)",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.string.end.ppga"
+				}
+			},
+			"patterns": [{
+					"match": "\\\\(\\d{1,3}|.)",
+					"name": "constant.character.escape.ppga"
+				},
+				{
+					"include": "#f-string-substitution"
+				}
+			]
+		},
+		"f-string-substitution": {
+			"name": "meta.interpolation.ppga",
+			"begin": "\\{",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.f-string-expression.begin.ppga"
+				}
+			},
+			"end": "\\}",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.f-string-expression.end.ppga"
+				}
+			},
+			"patterns": [{
+				"include": "#expression"
+			}]
+		},
+		"if-block": {
+			"name": "meta.if-block.ppga meta.block.ppga",
+			"begin": "\\bif\\b",
+			"beginCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"end": "\\}\\b",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"for-block": {
+			"name": "meta.for-block.ppga meta.block.ppga",
+			"begin": "\\b(for|fori)\\b",
+			"beginCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"end": "\\b}\\b",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"while-block": {
+			"name": "meta.while-block.ppga meta.block.ppga",
+			"begin": "\\bwhile\\b",
+			"beginCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"end": "\\b}\\b",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.ppga"
+				}
+			},
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"logic-operator": {
+			"name": "keyword.operator.logic.ppga",
+			"match": "\\b(and|or|not)\\b"
+		},
+		"operator": {
+			"name": "keyword.operator.ppga",
+			"match": "(\\+|@|-|%|\\*|\\/|\\\\|\\*\\*|=>|==?|!=|<=?|>=?|(?<!\\.)\\.{2,3}(?!\\.))"
+		},
+		"keyword": {
+			"name": "keyword.control.ppga",
+			"match": "\\b(break|else|for|if|for|return|while|let|global|in|lua)\\b"
+		},
+		"table-function": {
+			"name": "meta.function.ppga",
+			"begin": "(?=\\bfn\\s+[_[:alpha:]][_[:alnum:]]*(?:\\.[_[:alpha:]][_[:alnum:]]*)*(?:\\.(?:[_[:alpha:]][_[:alnum:]]*)|:(?:[_[:alpha:]][_[:alnum:]]*)))",
+			"end": "\\b}\\b",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.function-end.ppga"
+				}
+			},
+			"patterns": [{
+					"include": "#table-function-name"
+				},
+				{
+					"include": "#general"
+				}
+			]
+		},
+		"table-function-name": {
+			"name": "meta.function.ppga",
+			"begin": "\\b(fn)\\s+(([_[:alpha:]][_[:alnum:]]*(?:\\.[_[:alpha:]][_[:alnum:]]*)*)(?:(\\.)([_[:alpha:]][_[:alnum:]]*)|(:)([_[:alpha:]][_[:alnum:]]*)))(?=\\()",
+			"beginCaptures": {
+				"1": {
+					"name": "storage.type.function.property.ppga"
+				},
+				"3": {
+					"name": "entity.name.function.ppga entity.name.function-table.ppga"
+				},
+				"4": {
+					"name": "punctuation.accessor.ppga"
+				},
+				"5": {
+					"name": "entity.name.function.ppga"
+				},
+				"6": {
+					"name": "punctuation.method-accessor.ppga"
+				},
+				"7": {
+					"name": "entity.name.method-function.ppga entity.name.function.ppga"
+				}
+			},
+			"end": "(?<=\\))",
+			"patterns": [{
+				"include": "#parameters"
+			}]
+		},
+		"function": {
+			"name": "meta.function.ppga",
+			"begin": "(?=\\b(?:global\\s+)?fn\\s+[_[:alpha:]][_[:alnum:]]*)",
+			"beginCaptures": {
+				"0": {
+					"name": "keyword.control.function-end.ppga"
+				}
+			},
+			"patterns": [{
+					"include": "#function-name"
+				},
+				{
+					"include": "#general"
+				}
+			]
+		},
+		"function-name": {
+			"name": "meta.function.ppga",
+			"begin": "\\b(?:(global)\\s+)?(fn)\\s+([_[:alpha:]][_[:alnum:]]*)(?=\\()",
+			"beginCaptures": {
+				"1": {
+					"name": "storage.modifier.local.ppga"
+				},
+				"2": {
+					"name": "storage.type.function.ppga"
+				},
+				"3": {
+					"name": "entity.name.function.ppga"
+				}
+			},
+			"end": "(?<=\\))",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.function-end.ppga"
+				}
+			},
+			"patterns": [{
+				"include": "#parameters"
+			}]
+		},
+		"anonymous-function": {
+			"name": "meta.function.anonymous.ppga",
+			"begin": "(?=\\bfn(?!\\s+[_[:alpha:]][_[:alnum:]]*))",
+			"end": "(?==>|\\{|(^\\s*(fn|let|global)\\s+))",
+			"endCaptures": {
+				"0": {
+					"name": "keyword.control.function-end.ppga"
+				}
+			},
+			"patterns": [{
+					"include": "#anonymous-function-name"
+				},
+				{
+					"include": "#general"
+				}
+			]
+		},
+		"anonymous-function-name": {
+			"name": "meta.function.anonymous.ppga",
+			"begin": "\\b(fn)\\s*(?!\\s+[_[:alpha:]][_[:alnum:]]*)(?=\\()",
+			"beginCaptures": {
+				"1": {
+					"name": "storage.type.function.anonymous.ppga"
+				}
+			},
+			"end": "(?<=\\))",
+			"patterns": [{
+				"include": "#parameters"
+			}]
+		},
+		"parameters": {
+			"name": "meta.parameters.ppga",
+			"begin": "\\(",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.parameters.begin.ppga"
+				}
+			},
+			"end": "\\)",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.definition.parameters.end.ppga"
+				}
+			},
+			"patterns": [{
+					"include": "#line-comment"
+				},
+				{
+					"include": "#block-comment"
+				},
+				{
+					"name": "punctuation.separator.parameter.ppga",
+					"match": ","
+				},
+				{
+					"name": "variable.parameter.ppga",
+					"match": "[_[:alpha:]][_[:alnum:]]*"
+				},
+				{
+					"name": "variable.parameter.rest.ppga",
+					"match": "@"
+				}
+			]
+		},
+		"support-function-call": {
+			"begin": "\\b(api|util|range|len|streamelements|youtube_playlist|configure|get_config|get_playlist_videos|me|my_id|channel|channel_id|get_settings|get_public_settings|current_song_title|queue_song_in_channel|queue|queue_many_in_channel|queue_many||channels|song_requests|current_song|print|info|error|debug|get_args)\\s*[\\({]",
+			"beginCaptures": {
+				"1": {
+					"name": "meta.function-call.ppga support.function"
+				}
+			},
+			"end": "[\\)}]",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"support-string-function-call": {
+			"begin": "\\b(api|util|range|len|streamelements|youtube_playlist|configure|get_config|get_playlist_videos|me|my_id|channel|channel_id|get_settings|get_public_settings|current_song_title|queue_song_in_channel|queue|queue_many_in_channel|queue_many||channels|song_requests|current_song|print|info|error|debug|get_args)\\s*[\\({]",
+			"beginCaptures": {
+				"1": {
+					"name": "meta.function-call.ppga support.function"
+				}
+			},
+			"end": "(?<=[\\'\"]|\\]\\])",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"function-call": {
+			"begin": "(?=(?:[_[:alpha:]][_[:alnum:]]*[\\.:])*)([_[:alpha:]][_[:alnum:]]*)\\s*[\\({]",
+			"beginCaptures": {
+				"1": {
+					"name": "meta.function-call.ppga entity.name.function"
+				}
+			},
+			"end": "[\\)}]",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"string-function-call": {
+			"begin": "(?=(?:[_[:alpha:]][_[:alnum:]]*[\\.:])*)([_[:alpha:]][_[:alnum:]]*)\\s*(?=[\\'\"]|\\[\\[)",
+			"beginCaptures": {
+				"1": {
+					"name": "meta.function-call.ppga entity.name.function"
+				}
+			},
+			"end": "(?<=[\\'\"]|\\]\\])",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"table": {
+			"name": "meta.table.ppga",
+			"begin": "{",
+			"end": "}",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"array": {
+			"name": "meta.array.ppga",
+			"begin": "\\[",
+			"end": "\\]",
+			"patterns": [{
+				"include": "#general"
+			}]
+		},
+		"table-property": {
+			"match": "(\\.)([_[:alpha:]][_[:alnum:]]*)\\b(?!\\s*([\\({\\'\"]|\\[\\[))",
+			"captures": {
+				"1": {
+					"name": "punctuation.accessor"
+				},
+				"2": {
+					"name": "variable.other.table.property.ppga"
+				}
+			}
+		},
+		"language-variable": {
+			"name": "variable.language.ppga",
+			"match": "\\bself\\b"
+		},
+		"support-variable": {
+			"name": "support.variable.ppga",
+			"begin": "\\b(api|util|range|len|streamelements|youtube_playlist|configure|get_config|get_playlist_videos|me|my_id|channel|channel_id|get_settings|get_public_settings|current_song_title|queue_song_in_channel|queue|queue_many_in_channel|queue_many||channels|song_requests|current_song|print|info|error|debug|get_args)\\s*[\\({]"
+		},
+		"variable": {
+			"name": "variable.other.ppga",
+			"match": "\\b[_[:alpha:]][_[:alnum:]]*\\b"
+		}
+	}
+}
