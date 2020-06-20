@@ -1,11 +1,15 @@
+//! Implements the PPGA parser using the recursive descent algorithm and an EBNF-like grammar .
 use logos::Lexer as RawLexer;
 
-use super::{ast::*, errors::*, lexer::*};
+use super::{super::errors::*, ast::*, lexer::*};
+use crate::PPGAConfig;
 
+/// The lexer type expected by the parser.
 pub type Lexer<'a> = RawLexer<'a, TokenKind<'a>>;
 type ExprRes<'a> = Result<Expr<'a>, ParseError>;
 type StmtRes<'a> = Result<Stmt<'a>, ParseError>;
 
+/// A recursive descent PPGA parser.
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     previous: Token<'a>,
@@ -15,10 +19,11 @@ pub struct Parser<'a> {
     ex: ErrCtx<'a>,
     /// The comments encountered since the last statement
     comments: Vec<Comment<'a>>,
-    emit_comments: bool,
+    config: PPGAConfig,
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a new parser from the given lexer.
     pub fn new(lexer: Lexer<'a>) -> Self {
         let ex = ErrCtx::new(lexer.source());
 
@@ -37,18 +42,22 @@ impl<'a> Parser<'a> {
             line: 0,
             ex,
             comments: Vec::new(),
-            emit_comments: true,
+            config: PPGAConfig::default(),
         };
         // Scan the first two tokens
         p.advance();
         p
     }
 
-    pub fn emit_comments(mut self, emit: bool) -> Self {
-        self.emit_comments = emit;
-        self
+    /// Creates a new parser from the given config and lexer.
+    pub fn with_config(config: PPGAConfig, lexer: Lexer<'a>) -> Self {
+        Self {
+            config,
+            ..Self::new(lexer)
+        }
     }
 
+    /// Consumes the parser, returning either the parsed AST or the list of encountered errors.
     pub fn parse(mut self) -> Result<AST<'a>, ErrCtx<'a>> {
         let mut statements = vec![];
 
@@ -68,11 +77,12 @@ impl<'a> Parser<'a> {
             Ok(AST {
                 stmts: statements,
                 comments: self.comments,
+                config: self.config,
             })
         }
     }
 
-    pub fn statement(&mut self) -> Result<Stmt<'a>, ParseError> {
+    fn statement(&mut self) -> Result<Stmt<'a>, ParseError> {
         if self.match_any(&[TokenKind::Let, TokenKind::Global]) {
             self.var_declaration()
         } else if self.r#match(TokenKind::LeftBrace) {
@@ -873,7 +883,7 @@ impl<'a> Parser<'a> {
             token = self.advance_and_skip_newlines();
         }
 
-        if self.emit_comments {
+        if self.config.emit_comments {
             self.comments.extend(new_comments);
         }
 
@@ -926,62 +936,4 @@ impl<'a> Parser<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use logos::Logos;
-
-    #[test]
-    fn test_parser() {
-        pretty_env_logger::init();
-
-        let source = r#"
-        // lel
-        a;
-        let a =  -1;
-        let b = 2 + 2;
-        let c = 3 * 3;
-        let d = 4 / 4;
-        let e = 4 \ 4;
-        let f = 5 ** 5;
-        let g = 6 % 7;
-        let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-        let arr = [1, 2, 3];
-        let dict = {1 = 2, 3 = 4};
-
-        print(len(arr));
-        print(len(dict));
-        "#;
-        //         let source = r#"
-        //         // We can disable the commands that require an API that is not available.
-        //         /*
-        //         A multi-line comment
-        //         */
-        // a;
-        // //kek
-        // let a =  -1;
-        // let b = 2 + 2;
-        // let c = 3 * 3;
-        // let d = 4 / 4;
-        // let e = 4 \ 4;
-        // let f = 5 ** 5;
-        // let g = 6 % 7;
-
-        // let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-        // let arr = [1, 2, 3];
-        // let dict = {1 = 2, 3 = 4};
-
-        // print(len(arr));
-        // print(len(dict));"#;
-
-        let parser = Parser::new(TokenKind::lexer(source));
-        println!(
-            "{:?}",
-            parser.parse().map_err(|e| {
-                e.report_all();
-            })
-        );
-        assert!(false);
-    }
-}
+mod tests {}

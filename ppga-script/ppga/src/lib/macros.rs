@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! expr {
     ($self:ident, $kind:expr) => {{
-        use $crate::dsl::ast::*;
+        use $crate::frontend::ast::*;
         Expr {
             kind: $kind,
             comments: vec![],
@@ -12,7 +12,7 @@ macro_rules! expr {
 #[macro_export]
 macro_rules! stmt {
     ($self:ident, $kind:expr) => {{
-        use $crate::dsl::ast::*;
+        use $crate::frontend::ast::*;
         Stmt {
             kind: $kind,
             comments: $self.comments.drain(..).collect(),

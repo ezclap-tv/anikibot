@@ -1,18 +1,55 @@
-use super::{
-    ast::*,
-    code_builder::{pad, CodeBuilder, DEFAULT_INDENT_SIZE},
-};
+//! This module implements the code generation stage of the `PPGA` to `Lua` transpiler.
+//!
+//! Usage example:
+//!
+//! ```
+//! extern crate ppga;
+//! use ppga::{frontend::{Parser, lexer}, codegen::emit_lua};
+//!
+//! let ast = Parser::new(lexer("fn f() { return 5; }")).parse().unwrap();
+//! let output = emit_lua(&ast);
+//! assert_eq!(output,
+//! r#"local function f()
+//!     return (5)
+//! end"#);
+//! ```
+use crate::{codegen::code_builder::*, config::PPGAConfig, frontend::ast::*};
 
+/// Transpiles the given AST object into Lua.
+
+/// ```
+/// # extern crate ppga;
+/// use ppga::{frontend::{Parser, lexer}, codegen::emit_lua};
+///
+/// let ast = Parser::new(lexer("fn f() { return 5; }")).parse().unwrap();
+/// let output = emit_lua(&ast);
+/// assert_eq!(output,
+/// r#"local function f()
+///     return (5)
+/// end"#);
+/// ```
 pub fn emit_lua<'a>(ast: &AST<'a>) -> String {
-    let mut code = CodeBuilder::default();
+    let mut code = CodeBuilder::new(ast.config.indent_size);
     for stmt in &ast.stmts {
-        code.push(stmt_to_lua(&stmt, 0).trim_end());
+        code.push(stmt_to_lua(&stmt, &ast.config, 0).trim_end());
     }
     code.build()
 }
 
-pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
-    let mut code = CodeBuilder::default();
+/// Transpiles a single PPGA statement into a Lua statement.
+///
+/// ```
+/// # extern crate ppga;
+/// use ppga::{frontend::ast::*, codegen::stmt_to_lua, config::PPGAConfig};
+///
+/// let var = Ptr::new(Expr::new(ExprKind::Variable("x")));
+/// let expr = Ptr::new(Expr::new(ExprKind::Unary("-", var.clone())));
+/// let stmt = Stmt::new(StmtKind::Assignment(var, "=", expr));
+/// let result = stmt_to_lua(&stmt, &PPGAConfig::default(), 0);
+/// assert_eq!(result, "x = -(x)");
+/// ```
+pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> String {
+    let mut code = CodeBuilder::new(config.indent_size);
     for comment in &stmt.comments {
         match comment {
             Comment::Regular(c) => {
@@ -26,8 +63,11 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
 
     match &stmt.kind {
         StmtKind::If(cond, then, r#else) => {
-            code.push_and_pad(format!("if {} then", expr_to_lua(&cond, depth)), depth);
-            code.push(stmt_to_lua(&then, depth));
+            code.push_and_pad(
+                format!("if {} then", expr_to_lua(&cond, config, depth)),
+                depth,
+            );
+            code.push(stmt_to_lua(&then, config, depth));
             match r#else.as_ref().map(|s| &s.kind) {
                 Some(StmtKind::If(_, _, _)) => {
                     // Pop the `end` of the previous block
@@ -37,7 +77,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                     }
                     code.append(format!(
                         "else{}",
-                        stmt_to_lua(r#else.as_ref().unwrap(), depth)
+                        stmt_to_lua(r#else.as_ref().unwrap(), config, depth)
                     ));
                 }
                 Some(_) => {
@@ -47,7 +87,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                         last.pop();
                     }
                     code.append("else")
-                        .push(stmt_to_lua(r#else.as_ref().unwrap(), depth));
+                        .push(stmt_to_lua(r#else.as_ref().unwrap(), config, depth));
                 }
                 _ => (),
             }
@@ -73,7 +113,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                         {
                             let args = exprs
                                 .iter()
-                                .map(|e| expr_to_lua(e, depth))
+                                .map(|e| expr_to_lua(e, config, depth))
                                 .collect::<Vec<_>>()
                                 .join(", ");
                             if exprs.len() == 1 && r#for.vars.len() == 2 {
@@ -89,18 +129,21 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                     ),
                 })
                 .append(" do")
-                .push_and_pad(stmt_to_lua(&r#for.body, depth), depth);
+                .push_and_pad(stmt_to_lua(&r#for.body, config, depth), depth);
         }
         StmtKind::While(cond, body) => {
-            code.push_and_pad(format!("while {} do", expr_to_lua(&cond, depth)), depth)
-                .push_and_pad(stmt_to_lua(&body, depth), depth);
+            code.push_and_pad(
+                format!("while {} do", expr_to_lua(&cond, config, depth)),
+                depth,
+            )
+            .push_and_pad(stmt_to_lua(&body, config, depth), depth);
         }
         StmtKind::Block(body, is_standalone) => {
             if *is_standalone {
                 code.push_and_pad("do", depth);
             }
             for stmt in body {
-                code.push(stmt_to_lua(stmt, depth + 1));
+                code.push(stmt_to_lua(stmt, config, depth + 1));
             }
             code.push_and_pad("end", depth);
         }
@@ -112,9 +155,9 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                         .iter()
                         .map(|v| match &v.kind {
                             ExprKind::Unary("...", _) => {
-                                expr_to_lua(&v, depth)
+                                expr_to_lua(&v, config, depth)
                             }
-                            _ => format!("({})", expr_to_lua(&v, depth)),
+                            _ => format!("({})", expr_to_lua(&v, config, depth)),
                         })
                         .collect::<Vec<_>>()
                         .join(", ")
@@ -123,24 +166,24 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
             );
         }
         StmtKind::ExprStmt(expr) => {
-            code.push_and_pad(expr_to_lua(&expr, depth), depth);
+            code.push_and_pad(expr_to_lua(&expr, config, depth), depth);
         }
         StmtKind::Assignment(obj, op, value) => {
             code.push_and_pad(
                 format!(
                     "{} {} {}",
-                    expr_to_lua(&obj, depth),
+                    expr_to_lua(&obj, config, depth),
                     match *op {
-                        "**=" => format!("= {} {}", expr_to_lua(&value, depth), "^"),
+                        "**=" => format!("= {} {}", expr_to_lua(&value, config, depth), "^"),
                         rest => rest.to_string(),
                     },
-                    expr_to_lua(&value, depth)
+                    expr_to_lua(&value, config, depth)
                 ),
                 depth,
             );
         }
         StmtKind::FuncDecl(kind, r#fn) => {
-            code.push_and_pad(fn_to_lua(r#fn, *kind, depth), depth);
+            code.push_and_pad(fn_to_lua(r#fn, *kind, config, depth), depth);
         }
         StmtKind::VarDecl(kind, names, value) => {
             code.push_and_pad(
@@ -152,7 +195,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
                     },
                     names.join(", "),
                     match value {
-                        Some(ref expr) => format!(" = {}", expr_to_lua(expr, depth)),
+                        Some(ref expr) => format!(" = {}", expr_to_lua(expr, config, depth)),
                         None => String::new(),
                     }
                 ),
@@ -170,8 +213,18 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, depth: usize) -> String {
     code.build()
 }
 
-pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
-    let mut code = CodeBuilder::default();
+/// Transpiles a single PPGA expression into a Lua expression.
+///
+/// ```
+/// # extern crate ppga;
+/// use ppga::{frontend::ast::*, codegen::expr_to_lua, config::PPGAConfig};
+///
+/// let expr = Expr::new(ExprKind::Unary("-", Ptr::new(Expr::new(ExprKind::Variable("x")))));
+/// let result = expr_to_lua(&expr, &PPGAConfig::default(), 0);
+/// assert_eq!(result, "-(x)");
+/// ```
+pub fn expr_to_lua<'a>(expr: &Expr<'a>, config: &PPGAConfig, depth: usize) -> String {
+    let mut code = CodeBuilder::new(config.indent_size);
 
     for comment in &expr.comments {
         match comment {
@@ -208,8 +261,8 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
                 frags
                     .iter()
                     .map(|frag| match frag.kind {
-                        ExprKind::Literal(_, true) => expr_to_lua(frag, depth),
-                        _ => format!("tostring({})", expr_to_lua(frag, depth)),
+                        ExprKind::Literal(_, true) => expr_to_lua(frag, config, depth),
+                        _ => format!("tostring({})", expr_to_lua(frag, config, depth)),
                     })
                     .collect::<Vec<_>>()
                     .join(" .. "),
@@ -218,7 +271,7 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
         ExprKind::Get(obj, attr, is_static) => {
             code.append(format!(
                 "{}{}{}",
-                expr_to_lua(&obj, depth),
+                expr_to_lua(&obj, config, depth),
                 if *is_static { ":" } else { "." },
                 attr,
             ));
@@ -226,43 +279,43 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
         ExprKind::GetItem(obj, key) => {
             code.append(format!(
                 "{}[{}]",
-                expr_to_lua(&obj, depth),
-                expr_to_lua(&key, depth)
+                expr_to_lua(&obj, config, depth),
+                expr_to_lua(&key, config, depth)
             ));
         }
         ExprKind::Call(callee, args) => {
             code.append(format!(
                 "{}({})",
-                expr_to_lua(&callee, depth),
+                expr_to_lua(&callee, config, depth),
                 args.iter()
-                    .map(|a| expr_to_lua(&a, depth))
+                    .map(|a| expr_to_lua(&a, config, depth))
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
         }
         ExprKind::Len(obj) => {
-            code.append(format!("#({})", expr_to_lua(&obj, depth)));
+            code.append(format!("#({})", expr_to_lua(&obj, config, depth)));
         }
         ExprKind::Unary(op, obj) => {
             code.append(match *op {
-                "..." => expr_to_lua(&obj, depth),
-                _ => format!("{}({})", op, expr_to_lua(&obj, depth)),
+                "..." => expr_to_lua(&obj, config, depth),
+                _ => format!("{}({})", op, expr_to_lua(&obj, config, depth)),
             });
         }
         ExprKind::Grouping(obj) => {
-            code.append(format!("({})", expr_to_lua(&obj, depth)));
+            code.append(format!("({})", expr_to_lua(&obj, config, depth)));
         }
         ExprKind::Binary(l, op, r) => {
             code.append(format!(
                 "{} {} {}",
-                expr_to_lua(&l, depth),
+                expr_to_lua(&l, config, depth),
                 match *op {
                     "\\" => "//",
                     "**" => "^",
                     "!=" => "~=",
                     rest => rest,
                 },
-                expr_to_lua(&r, depth)
+                expr_to_lua(&r, config, depth)
             ));
         }
         ExprKind::ArrayLiteral(args) => {
@@ -270,7 +323,7 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
                 "{{{}}}",
                 args.iter()
                     .enumerate()
-                    .map(|(i, a)| format!("[{}] = {}", i, expr_to_lua(a, depth)))
+                    .map(|(i, a)| format!("[{}] = {}", i, expr_to_lua(a, config, depth)))
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
@@ -282,7 +335,11 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
                 pairs
                     .iter()
                     .map(|(k, v)| pad(
-                        format!("[{}] = {}", expr_to_lua(&k, depth), expr_to_lua(&v, depth)),
+                        format!(
+                            "[{}] = {}",
+                            expr_to_lua(&k, config, depth),
+                            expr_to_lua(&v, config, depth)
+                        ),
                         depth + 1,
                         DEFAULT_INDENT_SIZE,
                     ))
@@ -296,7 +353,7 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
             ));
         }
         ExprKind::Lambda(r#fn) => {
-            code.append(fn_to_lua(&r#fn, VarKind::Local, depth));
+            code.append(fn_to_lua(&r#fn, VarKind::Local, config, depth));
         }
         ExprKind::NewLine => {
             code.append("\n");
@@ -306,8 +363,14 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, depth: usize) -> String {
     code.build()
 }
 
-fn fn_to_lua<'a>(r#fn: &Function<'a>, kind: VarKind, depth: usize) -> String {
-    CodeBuilder::default()
+/// Transpiles a single PPGA function into a Lua function.
+pub fn fn_to_lua<'a>(
+    r#fn: &Function<'a>,
+    kind: VarKind,
+    config: &PPGAConfig,
+    depth: usize,
+) -> String {
+    CodeBuilder::new(config.indent_size)
         .push(format!(
             "{}function {}({})",
             if r#fn.name.is_some() && kind == VarKind::Local {
@@ -318,40 +381,25 @@ fn fn_to_lua<'a>(r#fn: &Function<'a>, kind: VarKind, depth: usize) -> String {
             r#fn.name.unwrap_or(""),
             r#fn.params
                 .iter()
-                .map(|p| expr_to_lua(&p, depth))
+                .map(|p| expr_to_lua(&p, config, depth))
                 .collect::<Vec<_>>()
                 .join(", "),
         ))
-        .push(stmt_to_lua(&r#fn.body, depth))
+        .push(stmt_to_lua(&r#fn.body, config, depth))
         .build()
 }
 
+#[allow(unused)]
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dsl::{lexer::*, parser::*};
+    use crate::frontend::{lexer, parser::*};
     use logos::Logos;
 
-    #[test]
+    #[cfg(ignore)]
     fn test_codegen() {
-        let source = r#"// lel
-a;
-let a =  -1;
-let b = 2 + 2;
-let c = 3 * 3;
-let d = 4 / 4;
-let e = 4 \ 4;
-let f = 5 ** 5;
-let g = 6 % 7;
-let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-let arr = [1, 2, 3];
-let dict = {1 = 2, 3 = 4};
-
-print(len(arr));
-print(len(dict));
-        "#;
-        let parser = Parser::new(TokenKind::lexer(source));
+        let source = r#""#;
+        let parser = Parser::new(lexer(source));
         let ast = parser.parse().map_err(|e| e.report_all()).unwrap();
         let lua = emit_lua(&ast);
         assert!(false, "{}", lua);

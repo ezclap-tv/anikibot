@@ -1,7 +1,14 @@
+//! Implements the PPGA Lexer using the [`Logos`] crate.
+//!
+//! [`Logos`]: https://crates.io/crates/logos
 use logos::{Logos, Span};
 
+/// PPGAs numeric type.
 pub type Number = f64;
 
+/// A token that is used to add extra information to the [`TokenKind`]s returned by the lexer.
+///
+/// [`TokenKind`]: crate::frontend::lexer::TokenKind
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub lexeme: &'a str,
@@ -11,6 +18,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
+    /// Creates a new token.
     pub fn new(lexeme: &'a str, line: usize, span: Span, kind: TokenKind<'a>) -> Self {
         Self {
             lexeme,
@@ -21,71 +29,95 @@ impl<'a> Token<'a> {
     }
 }
 
+/// The kind of a PPGA token.
 #[derive(Debug, PartialEq, Clone, Logos)]
 pub enum TokenKind<'a> {
+    /// A single dot: `.`. Used in attribute access expressions.
     #[token(".")]
     Dot,
 
+    /// Two dots in a row: `..`. Used for string concatenation.
     #[token("..")]
     DoubleDot,
 
+    /// Three dots in a row: `...`. Used to unpack arrays/tables/function calls.
     #[token("...")]
     Ellipsis,
 
+    /// A single `@`. Used to define variadic parameters in function declarations.
     #[token("@")]
     Variadics,
 
+    /// A single `;`. Used to end statements.
     #[token(";")]
     Semicolon,
 
+    /// A single `:`. Used to call static methods on tables.
     #[token(":")]
     Colon,
 
+    /// A single `,`. Used for value separation in lists, dicts, and function and variable declarations.
     #[token(",")]
     Comma,
 
+    /// A single `(`.
     #[token("(")]
     LeftParen,
 
+    /// A single `)`.
     #[token(")")]
     RightParen,
 
+    /// A single `{`. Used to open blocks and dict literals.
     #[token("{")]
     LeftBrace,
 
+    /// A single `}`. Used to close blocks and dict literals.
     #[token("}")]
     RightBrace,
 
+    /// A single `[`. Used to open attribute access expressions and list literals.
     #[token("[")]
     LeftBracket,
 
+    /// A single `]`. Used to close attribute access expressions and list literals.
     #[token("]")]
     RightBracket,
 
+    /// A fat arrow: `=>`. Used in single-expression functions.
     #[token("=>")]
     FatArrow,
 
+    /// An ASCII identifier. Must start with a letter and may contain letters and numbers afterwards.
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*")]
     Identifier,
 
+    /// The `range` keyword.
     #[regex("range")]
     Range,
 
+    /// The `len` keyword.
     #[regex("len")]
     Len,
 
+    /// The `fn` keyword.
     #[token("fn")]
     Fn,
 
+    /// A `?`. Used to indicate that an argument is optional or
+    // to automatically unpack let statements initialized with an ok/err pair.
     #[token("?")]
     Query,
 
+    /// The `let` keyword. Used for local variable definitions.
     #[token("let")]
     Let,
 
+    /// The `global` keyword. Used for global variable and function definitions.
     #[token("global")]
     Global,
 
+    /// The `break` keyword.
     #[token("break")]
     Break,
 
@@ -93,142 +125,147 @@ pub enum TokenKind<'a> {
     // #[token("continue")]
     // Continue,
     //
+    /// The `and` keyword.
     #[token("and")]
     And,
-
+    /// The `or` keyword.
     #[token("or")]
     Or,
-
+    /// The `in` keyword.
     #[token("in")]
     In,
-
+    /// The `if` keyword.
     #[token("if")]
     If,
 
+    /// The `else` keyword.
     #[token("else")]
     Else,
-
+    /// The `while` keyword.
     #[token("while")]
     While,
-
+    /// The `for` keyword.
     #[token("for")]
     For,
-
+    /// The `fori` keyword.
     #[token("fori")]
     ForI,
-
+    /// The `return` keyword.
     #[token("return")]
     Return,
-
+    /// A `lua {}` block. The sequence of bytes inside the block
+    /// is de-indented once and directly pasted into the lua file.
     #[regex(r"lua[\s\f]+\{", scan_lua_block)]
     Lua(&'a str),
-
+    /// The `true` literal.
     #[token("true")]
     True,
-
+    /// The `false` literal.
     #[token("false")]
     False,
-
+    /// The `nil` literal.
     #[token("nil")]
     Nil,
-
+    /// A floating point number.
     #[regex("[0-9]+(\\.[0-9]+)?")]
     Number,
 
+    /// An interpolated string literal. Must start with an `f`: `f"a + b = {a + b}"`.
+    /// An interpolated fragment may be escaped with a backslash: `f"I am \{ escaped }"`.
     #[regex("f\"([^\"\\\\]|\\\\.)*\"", interpolated_string)]
     #[regex("f'([^'\\\\]|\\\\.)*'", interpolated_string)]
     InterpolatedString(Vec<Frag<'a>>),
 
+    /// A string literal.
     #[regex("\"([^\"\\\\]|\\\\.)*\"")]
     #[regex("'([^'\\\\]|\\\\.)*'")]
     StringLiteral,
 
+    /// The `not` keyword.
     #[token("not")]
     Not,
-
+    /// A single `*`. Used for multiplication.
     #[token("*")]
     Star,
-
+    /// A single `/`. Used for float division.
     #[token("/")]
     Slash,
-
+    /// A single `\`. Used for integer division.
     #[token("\\")]
     BackSlash,
-
+    /// A single `%`. Used to find remainders.
     #[token("%")]
     Percent,
-
+    /// Two asterisks in a row: `**`. Used for exponentiation.
     #[token("**")]
     Pow,
-
+    /// A single `+`. Used for addition.
     #[token("+")]
     Plus,
-
+    /// A single `-`. Used subtraction multiplication.
     #[token("-")]
     Minus,
-
+    /// A single `<`. Used for less than comparisons.
     #[token("<")]
     Lt,
-
+    /// A `<=`. Used for less than or equal to comparisons.
     #[token("<=")]
     Le,
-
+    /// A single `>`. Used for greater than comparisons,
     #[token(">")]
     Gt,
-
+    /// A `>=`. Used for greater than or equal to comparisons.
     #[token(">=")]
     Ge,
-
+    /// A double equals sign: `==`. Used for equality checks.
     #[token("==")]
     Eq,
-
+    /// A `!=`. Used for not-equality checks.
     #[token("!=")]
     Ne,
-
+    /// A single `=`. Used for assignment and dict initialization.
     #[token("=")]
     Equal,
-
+    /// A single `+=`. Expanded to `$1 = $1 + $2`.
     #[token("+=")]
     PlusEqual,
-
+    /// A single `-=`. Expanded to `$1 = $1 - $2`.
     #[token("-=")]
     MinusEqual,
-
+    /// A single `*=`. Expanded to `$1 = $1 * $2`.
     #[token("*=")]
     StarEqual,
-
+    /// A single `**=`. Expanded to `$1 = $1 ** $2`.
     #[token("**=")]
     PowEqual,
-
+    /// A single `/=`. Expanded to `$1 = $1 / $2`.
     #[token("/=")]
     SlashEqual,
-
+    /// A single `\=`. Expanded to `$1 = $1 \ $2`.
     #[token("\\=")]
     BackSlashEqual,
-
+    /// A single `%=`. Expanded to `$1 = $1 % $2`.
     #[token("%=")]
     PercentEqual,
-
+    /// A C-style comment.
     #[regex(r"//[^\n]*")]
     Comment,
-
+    /// A C-style multiline comment.
     #[regex(r"/\*", multi_line_comment)]
     MultilineComment,
-
+    /// A single End of Line character.
     #[regex("\n")]
     EOL,
-
+    /// A sequence of two or more multiline characters.
     #[regex("\n[\n]+", |lex| lex.slice().len())]
     EOLSeq(usize),
-
+    /// A sequence of one or more whitespace characters. Skipped by the lexer.
     #[regex(r"[ \t\f]+", logos::skip)]
     Whitespace,
-
+    /// Used to indicate an error.
     #[error]
     Error,
-
-    FragStart,
-    FragEnd,
+    /// Used to indicate the end of the file.
     EOF,
 }
 
@@ -257,9 +294,12 @@ fn multi_line_comment<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> bool {
     }
 }
 
+/// A fragment of an interpolated string.
 #[derive(Clone)]
 pub enum Frag<'a> {
+    /// A string fragment.
     Str(Token<'a>),
+    /// An executable interpolated fragment.
     Sublexer(logos::Lexer<'a, TokenKind<'a>>),
 }
 
@@ -392,62 +432,4 @@ fn scan_lua_block<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> Result<&'a s
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_lexer() {
-        //         let source = r#"
-        // print hello;
-        // lua {
-        //     for i = 1, 10 then
-        //         print(tostring(i) .. "test")
-        //     end
-        // }
-        // let _ = end;"#;
-        //         let source = r#""f abc";
-        // f"";
-        // f" ";
-        // f"one";
-        // f" two";
-        // f"three ";
-        // f"\{ escaped }";
-        // f"{}";
-        // f"{a}";
-        // f" {b}";
-        // f"{c} ";
-        // f"{d}{e}";
-        // f"{d * f(35)} {e + 1}";"#;
-        let source = r#"
-                // We can disable the commands that require an API that is not available.
-                /*
-                A multi-line comment
-                */"#;
-        // /*
-        // let a =  -1;
-        // let b = 2 + 2;
-        // let c = 3 * 3;
-        // let d = 4 / 4;
-        // let e = 4 // 4;
-        // let f = 5 ** 5;
-        // let g = 6 % 7;
-        // // let h = (7 << 8) & ~(9 >> 10) | 3;
-        // let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-        // let arr = [1, 2, 3];
-        // let dict = {1: 2, 3: 4};
-
-        // print(len(arr));
-        // print(len(dict));
-        //"#;
-
-        let mut lexer = TokenKind::lexer(source);
-        while let Some(token) = lexer.next() {
-            println!("--- NEW TOKEN ---");
-            println!("{:#?}", token);
-            println!("`{}`", lexer.slice());
-        }
-        assert!(false);
-        // assert!(false, "{:#?}", tokens);
-    }
-}
+mod tests {}
