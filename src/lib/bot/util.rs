@@ -1,12 +1,39 @@
-use super::command::Command;
-
+use super::command::{Command, CommandData};
+use serde::Deserialize;
+use serde_json::from_str;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufReader;
 
 pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
     if !str.starts_with(prefix) {
         &str[..]
     } else {
         &str[prefix.len()..str.len()]
+    }
+}
+
+pub fn load_file(path: &str) -> String {
+    let file = File::open(path).expect(&format!("Could not open file {}", path));
+    let mut reader = BufReader::new(file);
+    let mut contents = String::new();
+    reader
+        .read_to_string(&mut contents)
+        .expect(&format!("Failed to read file {}", path));
+
+    contents
+}
+
+pub fn parse_json<'a, R>(json: &'a str) -> R
+where
+    R: Deserialize<'a>,
+{
+    match from_str(&json) {
+        Ok(json) => json,
+        Err(e) => {
+            panic!("Failed to read \"commands.json\": {}", e);
+        }
     }
 }
 
@@ -32,21 +59,16 @@ pub fn duration_format(duration: chrono::Duration) -> String {
 
     output
 }
-/*
-pub fn find_command<'a>(
-    commands: &HashMap<String, Command>,
-    message: &'a str,
-) -> Option<(CommandData, Option<Vec<&'a str>>)> {
-    if !message.starts_with("xD") {
-        return None;
-    }
 
-    let tokens = message.split_whitespace().collect::<Vec<&str>>();
+pub fn find_command<'a, 'lua>(
+    commands: &HashMap<String, Command<'lua>>,
+    name: &'a str,
+) -> Option<(CommandData<'lua>, Option<Vec<&'a str>>)> {
+    let tokens = name.split_whitespace().collect::<Vec<&str>>();
     let mut next_commands = commands;
     for i in 0..tokens.len() {
         if let Some(command) = next_commands.get(tokens[i]) {
             let commands = command.commands.as_ref();
-            let data = command.data.as_ref();
 
             let next = if i + 1 < tokens.len() {
                 Some(tokens[i + 1])
@@ -60,6 +82,7 @@ pub fn find_command<'a>(
                 continue;
             }
 
+            let data = command.data.as_ref();
             if data.is_some() {
                 let mut args: Option<Vec<&str>> = None;
                 if tokens.len() - i > 0 {
@@ -76,4 +99,4 @@ pub fn find_command<'a>(
     }
 
     None
-}*/
+}

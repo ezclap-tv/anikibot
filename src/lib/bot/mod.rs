@@ -2,23 +2,23 @@ pub mod command;
 pub mod config;
 pub mod util;
 
-use log::{error, info};
+use std::collections::HashMap;
+use std::iter::FromIterator;
+
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
+use mlua::{UserData, UserDataMethods};
 
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
-use command::Command;
+use command::{load_commands, Command};
 
-use std::collections::HashMap;
-
-/* Previously had commands: help, ping, ping uptime, whoami, stop, song, song queue*/
+/* Previously had commands: ping, ping uptime, whoami, song, song queue */
 
 pub struct BotBuilder {
     streamelements_api: Option<ConsumerStreamElementsAPI>,
     youtube_api: Option<ConsumerYouTubePlaylistAPI>,
-    commands: Option<HashMap<String, Command>>,
     control: Control,
 }
 
@@ -37,41 +37,42 @@ impl BotBuilder {
         }
     }
 
-    pub fn add_commands(self, commands: HashMap<String, Command>) -> Self {
-        BotBuilder {
-            commands: Some(commands),
-            ..self
-        }
-    }
+    pub fn build<'lua>(self, lua: &'lua mlua::Lua) -> Bot<'lua> {
+        let commands: HashMap<String, Command<'lua>> = load_commands(lua, "commands.json");
 
-    pub fn build(self) -> Bot {
         Bot {
             streamelements: self.streamelements_api,
             youtube_playlist: self.youtube_api,
             control: self.control,
             config: config::BotConfig::get(),
             start: chrono::Utc::now(),
-            commands: self.commands.unwrap_or_else(|| HashMap::new()),
+            commands,
         }
     }
 }
 
-pub struct Bot {
+pub struct Bot<'lua> {
     pub streamelements: Option<ConsumerStreamElementsAPI>,
     pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
     control: Control, // exposed through Bot::stop
     config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,
-    pub commands: HashMap<String, Command>,
+    pub commands: HashMap<String, Command<'lua>>,
 }
 
-impl Bot {
+impl<'lua> Bot<'lua> {
     pub fn builder(control: Control) -> BotBuilder {
         BotBuilder {
             streamelements_api: None,
             youtube_api: None,
-            commands: None,
             control,
+        }
+    }
+
+    pub fn get_api_storage(&self) -> APIStorage {
+        APIStorage {
+            streamelements: self.streamelements.clone(),
+            youtube_playlist: self.youtube_playlist.clone()
         }
     }
 
@@ -86,10 +87,8 @@ impl Bot {
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
         // I give up, how do you do this without a clone? LULW
-        for channel in &self.config.channels.clone() {
-            info!("Connected to {} as {}", &channel, &ready.nickname);
-            self.join(&channel).await;
-        }
+        self.join_configured_channels(&ready.nickname).await;
+
         self.send(
             &"moscowwbish".into_channel().unwrap(),
             "gachiHYPER I'M READY",
@@ -111,6 +110,10 @@ impl Bot {
     }
 
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
+        if !evt.data.starts_with("xD") {
+            return;
+        }
+
         // hardcoded "xD" response because it needs to exist
         if evt.data.trim() == "xD" {
             self.send(&evt.channel, "xD").await;
@@ -128,24 +131,103 @@ impl Bot {
             return;
         }
 
-        let _ = util::strip_prefix(&evt.data, "xD ");
-        /*if let Some((_, _)) = util::find_command(&self.commands, message) {
-            //let response = (command.factory)(self, evt, args).await;
-            self.send(&evt.channel, "FeelsDankMan ❓").await;
-        }*/
+        // Not the most clean and fragrant piece code
+        // but demonstrates the usage of tokio::spawn.
+        if evt.data.starts_with("xD queue") && self.is_boss(&evt.name) {
+            let parts: Vec<String> = evt
+                .data
+                .split_whitespace()
+                .skip(2)
+                .map(String::from)
+                .collect();
+            let yt = self.youtube_playlist.clone().unwrap();
+            let se = self.streamelements.clone().unwrap();
+            tokio::spawn(async move {
+                let id = parts.first().unwrap();
+                let num = parts.last().unwrap().parse::<usize>().unwrap();
+                yt.configure(id.to_owned(), num).await.unwrap();
+                let song_urls = yt
+                    .get_playlist_videos()
+                    .await
+                    .unwrap()
+                    .into_videos()
+                    .unwrap()
+                    .into_iter()
+                    .map(|v| v.into_url())
+                    .collect();
+                log::trace!(
+                    "{:?}",
+                    se.song_requests().queue_many(song_urls).await.unwrap()
+                );
+            });
+            return;
+        }
+
+        if evt.data.starts_with("xD help ") {
+            let name = util::strip_prefix(&evt.data, "xD help ");
+            log::info!("Help for command {}", name);
+            let (data, _) = match util::find_command(&self.commands, &name) {
+                Some(found) => found,
+                None => {
+                    return;
+                }
+            };
+            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage))
+                .await;
+            return;
+        }
+
+        let message = util::strip_prefix(&evt.data, "xD ");
+        if let Some((command, args)) = util::find_command(&self.commands, message) {
+            let args: mlua::Variadic<String> = if let Some(args) = args {
+                mlua::Variadic::from_iter(args.into_iter().map(|it| it.to_owned()))
+            } else {
+                mlua::Variadic::new()
+            };
+            let response = (command.script)
+                .call_async::<mlua::Variadic<String>, String>(args)
+                .await;
+            let response = match response {
+                Ok(response) => response,
+                Err(e) => {
+                    log::error!("Failed to execute script: {:?}", e);
+                    format!("WAYTOODANK devs broke something!")
+                }
+            };
+            self.send(&evt.channel, response).await;
+        }
     }
 
-    async fn join(&mut self, channel: &str) {
+    pub async fn join(&mut self, channel: &str, nickname: &str) {
+        log::info!("Connected to {} as {}", &channel, nickname);
         self.control
             .writer()
             .join(channel)
             .await
             .unwrap_or_else(|e| {
-                error!(
+                log::error!(
                     "Caught a critical error while joining a channel {}: {:?}",
-                    channel, e
+                    channel,
+                    e
                 );
             })
+    }
+
+    async fn join_configured_channels(&mut self, nickname: &str) {
+        for channel in self.config.channels.iter() {
+            log::info!("Connected to {} as {}", &channel, nickname);
+            self.control
+                .writer()
+                .join(channel)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!(
+                        "Caught a critical error while joining a channel {}: {:?}",
+                        channel,
+                        e
+                    );
+                })
+        }
     }
 
     async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {
@@ -154,10 +236,33 @@ impl Bot {
             .privmsg(channel, message.into())
             .await
             .unwrap_or_else(|e| {
-                error!(
+                log::error!(
                     "Caught a critical error while sending a response to the channel {}: {:?}",
-                    channel, e
+                    channel,
+                    e
                 );
             })
+    }
+}
+
+pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage) {
+    if let Err(e) = lua.globals().set("api", api) {
+        log::error!("Failed to set global object \"api\": {}", e);
+    }
+}
+
+pub struct APIStorage {
+    pub streamelements: Option<ConsumerStreamElementsAPI>,
+    pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
+}
+
+impl UserData for APIStorage {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("streamelements", |_, instance, ()| {
+            Ok(instance.streamelements.clone())
+        });
+        methods.add_method("youtube_playlist", |_, instance, ()| {
+            Ok(instance.youtube_playlist.clone())
+        });
     }
 }

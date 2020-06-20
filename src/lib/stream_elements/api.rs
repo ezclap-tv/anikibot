@@ -15,7 +15,6 @@
 //!     println!("My id is {}", api.channel().my_id().await.unwrap());
 //! }
 //! ```
-use log::{debug, info, warn};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Error as ReqwestError, RequestBuilder,
@@ -54,12 +53,12 @@ impl StreamElementsAPIGuard {
     async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
         match &self.api.config.channel_id[..] {
             "" => {
-                warn!("Missing the channel id, attempting to GET");
+                log::warn!("Missing the channel id, attempting to GET");
                 self.api.config.channel_id = self.api.channels().my_id().await?;
             }
             _ => (),
         }
-        info!("Channel id appears to be correctly configured.");
+        log::info!("Channel id appears to be correctly configured.");
         Ok(self.api)
     }
 }
@@ -87,6 +86,16 @@ impl StreamElementsAPI {
                 config,
                 client: Client::builder().default_headers(headers).build().unwrap(), // Only fails if the TLS backend or config is invalid
             },
+        }
+    }
+
+    /// Makes a deep copy of the API. Useful for sending API objects to different threads.
+    #[inline]
+    pub(crate) fn deep_clone(&self) -> Option<Self> {
+        if self.config.channel_id.is_empty() {
+            None
+        } else {
+            Some(Self::new(self.config.clone()).api)
         }
     }
 
@@ -135,7 +144,7 @@ impl StreamElementsAPI {
         endpoint: &str,
     ) -> RequestBuilder {
         let url = StreamElementsAPI::get_method_endpoint_url(channel_id, method, endpoint);
-        debug!("GET: {}", url);
+        log::debug!("GET: {}", url);
         self.client.get(&url)
     }
 
@@ -143,7 +152,7 @@ impl StreamElementsAPI {
     #[inline]
     pub(crate) fn get(&self, endpoint: &str) -> RequestBuilder {
         let url = StreamElementsAPI::get_endpoint_url(endpoint);
-        debug!("GET: {}", url);
+        log::debug!("GET: {}", url);
         self.client.get(&url)
     }
 
@@ -155,7 +164,7 @@ impl StreamElementsAPI {
         endpoint: &str,
     ) -> RequestBuilder {
         let url = StreamElementsAPI::get_method_endpoint_url(channel_id, method, endpoint);
-        debug!("POST: {}", url);
+        log::debug!("POST: {}", url);
         self.client.post(&url)
     }
 
@@ -171,7 +180,7 @@ impl StreamElementsAPI {
     #[inline]
     pub(crate) fn post(&self, endpoint: &str) -> RequestBuilder {
         let url = StreamElementsAPI::get_endpoint_url(endpoint);
-        debug!("POST: {}", url);
+        log::debug!("POST: {}", url);
         self.client.post(&url)
     }
 

@@ -15,6 +15,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "config",
+ "lazy_static",
  "log",
  "logos",
  "mlua",

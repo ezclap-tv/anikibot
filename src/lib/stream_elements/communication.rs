@@ -10,6 +10,9 @@ pub type RequestSender = mpsc::UnboundedSender<APIRequestMessage>;
 /// The request `Sender` channel type.
 pub type ResponseSender = oneshot::Sender<APIResponse>;
 
+/// The threshold after which the queueing task will be sent to another thread.
+pub const QUEUE_TASK_SEND_THRESHOLD: usize = 5;
+
 /// Indicates the kind of the API request to be made by the API thread.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +39,13 @@ pub enum APIRequestKind {
     SongReq_QueueSongInChannel {
         channel_id: String,
         song_url: String,
+    },
+    SongReq_QueueMany {
+        song_urls: Vec<String>,
+    },
+    SongReq_QueueManyInChannel {
+        song_urls: Vec<String>,
+        channel_id: String,
     },
 }
 
@@ -108,6 +118,45 @@ pub(crate) fn spawn_api_thread(
                             .queue_song_in_channel(&channel_id, &song_url)
                             .await
                     ),
+                    APIRequestKind::SongReq_QueueMany { song_urls } => {
+                        if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
+                            log::info!(
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                song_urls.len(),
+                                QUEUE_TASK_SEND_THRESHOLD,
+                            );
+                            let output = msg.output;
+                            let api = api.deep_clone().unwrap();
+                            tokio::spawn(async move {
+                                let result = queue_many(&api, api.channel_id(), song_urls).await;
+                                output.send(result).unwrap();
+                            });
+                            continue;
+                        } else {
+                            queue_many(&api, api.channel_id(), song_urls).await
+                        }
+                    }
+                    APIRequestKind::SongReq_QueueManyInChannel {
+                        channel_id,
+                        song_urls,
+                    } => {
+                        if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
+                            log::info!(
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                song_urls.len(),
+                                QUEUE_TASK_SEND_THRESHOLD,
+                            );
+                            let output = msg.output;
+                            let api = api.deep_clone().unwrap();
+                            tokio::spawn(async move {
+                                let result = queue_many(&api, &channel_id, song_urls).await;
+                                output.send(result).unwrap();
+                            });
+                            continue;
+                        } else {
+                            queue_many(&api, &channel_id, song_urls).await
+                        }
+                    }
                 };
                 msg.output.send(result).unwrap();
             }
@@ -119,4 +168,53 @@ pub(crate) fn spawn_api_thread(
     });
 
     (tx, handle)
+}
+
+async fn queue_many(
+    api: &crate::StreamElementsAPI,
+    channel_id: &str,
+    song_urls: Vec<String>,
+) -> Result<APIResponseMessage, BackendError> {
+    let songs_total = song_urls.len();
+    let mut queued = 0;
+    let mut had_error = false;
+    for song in song_urls {
+        match api
+            .song_requests()
+            .queue_song_in_channel(&channel_id, &song)
+            .await
+        {
+            Ok(r) => {
+                queued += 1;
+                log::info!(
+                    "Successfully queued `{}`",
+                    r.json::<serde_json::Value>()
+                        .await
+                        .unwrap()
+                        .get("title")
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                )
+            }
+            Err(e) => {
+                log::error!(
+                    "Failed to queue the song with url={}, \nError was: {}",
+                    song,
+                    e
+                );
+                had_error = true;
+            }
+        }
+    }
+    if had_error {
+        Err(BackendError::from(format!(
+            "Failed to queue {} song(s)",
+            songs_total - queued,
+        )))
+    } else {
+        Ok(APIResponseMessage::Json(serde_json::json!({
+            "queued": queued
+        })))
+    }
 }

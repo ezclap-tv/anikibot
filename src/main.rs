@@ -11,24 +11,28 @@ extern crate backend;
 
 use std::convert::Into;
 
-use log::{error, info};
+use backend::{
+    lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
+    StreamElementsConfig,
+};
 use twitchchat::{Dispatcher, RateLimit, Runner, Status};
-
-use backend::{youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+
+    log::info!("Creating a Lua instance.");
+    let lua = mlua::Lua::new();
 
     let dispatcher = Dispatcher::new();
     let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
 
     let secrets = Secrets::get();
 
-    info!("Initializing the StreamElements API.");
+    log::info!("Initializing the StreamElements API.");
     let mut thread_handles: Vec<std::thread::JoinHandle<()>> = Vec::new();
 
-    info!("Initializing bot...");
+    log::info!("Initializing bot...");
     let bot = {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
@@ -48,27 +52,29 @@ async fn main() {
             builder = builder.add_youtube_api(api);
         }
 
-        builder.build()
+        builder.build(&lua)
     };
+    init_globals(&lua, bot.get_api_storage());
+
     let bot_done = bot.run(dispatcher);
 
-    info!("Connecting to twitch...");
+    log::info!("Connecting to twitch...");
     let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();
 
     let runner_done = runner.run(conn);
 
     tokio::select! {
-        _ = bot_done => { info!("Bot stopped") },
+        _ = bot_done => { log::info!("Bot stopped") },
         status = runner_done => {
             match status {
                 Ok(Status::Canceled) => {
-                    error!("Runner cancelled");
+                    log::error!("Runner cancelled");
                 },
                 Ok(Status::Eof) => {
-                    error!("Got EOF");
+                    log::error!("Got EOF");
                 },
                 Ok(Status::Timeout) => {
-                    error!("Timed out");
+                    log::error!("Timed out");
                 },
                 Err(err) => {
                     panic!(format!("{}", err));

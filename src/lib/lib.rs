@@ -6,6 +6,8 @@ extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
 
+#[macro_use]
+pub mod lua;
 pub mod bot;
 pub mod dsl;
 pub mod secrets;
