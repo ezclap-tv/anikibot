@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 extern crate log;
 extern crate reqwest;
 extern crate serde;
@@ -5,9 +6,10 @@ extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
 
-pub mod bot;
 #[macro_use]
 pub mod lua;
+pub mod bot;
+pub mod dsl;
 pub mod secrets;
 pub mod stream_elements;
 pub mod youtube;

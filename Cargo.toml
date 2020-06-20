@@ -3,6 +3,7 @@ name = "anikibot"
 version = "0.1.0"
 authors = ["jprochazk <honza.spacir@gmail.com>"]
 edition = "2018"
+default-run = "aniki"
 
 [dependencies]
 twitchchat = { version = "0.10.3" }
@@ -14,7 +15,9 @@ pretty_env_logger = "0.4.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.55"
 chrono = "0.4"
+logos = "0.11.4"
 mlua = { version = "0.4", features = ["async", "send", "lua53", "vendored"] }
+lazy_static = "1.4.0"
 better-panic = "0.2.0"
 
 [lib]
@@ -24,3 +27,7 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "aniki"
 path = "src/main.rs"
+
+[[bin]]
+name = "ppga"
+path = "src/ppga.rs"

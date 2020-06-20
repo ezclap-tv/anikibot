@@ -1,0 +1,12 @@
+let se = api:streamelements();
+if se == nil {
+    util:error("StreamElements API is unavailable");
+    return "StreamElements API is not configured";
+}
+
+let ok, err = api:streamelements():song_requests():current_song();
+if err != nil {
+    return "WAYTOODANK something broke";
+}
+
+return f"CheemJam now playing {ok.title} [ https://youtu.be/{ok.videoId} ]";
