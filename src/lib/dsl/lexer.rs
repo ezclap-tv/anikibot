@@ -373,7 +373,9 @@ fn scan_lua_block<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> Result<&'a s
 
     for ch in lex.remainder().chars() {
         n += 1;
-        if ch == '}' {
+        if ch == '{' {
+            n_opened += 1;
+        } else if ch == '}' {
             n_opened -= 1;
             if n_opened == 0 {
                 break;
