@@ -22,7 +22,7 @@ fn main() -> Result<(), BoxedError> {
         disable_comments = false;
     }
 
-    println!("==> File `{}`", args[1]);
+    println!("--> File `{}`", args[1]);
 
     let lua = std::fs::read_to_string(&args[1])
         .map_err(BoxedError::from)
@@ -34,7 +34,7 @@ fn main() -> Result<(), BoxedError> {
         })?;
 
     if let Some(path) = output {
-        println!("==> Writing the transpiled code to `{}`", path);
+        println!("--> Writing the transpiled code to `{}`", path);
         std::fs::write(path, lua)?;
     } else {
         println!("{}", lua);
