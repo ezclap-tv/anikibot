@@ -2,23 +2,32 @@ use logos::{Logos, Span};
 
 pub type Number = f64;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     pub lexeme: &'a str,
     pub span: Span,
-    pub kind: TokenKind,
+    pub line: usize,
+    pub kind: TokenKind<'a>,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(lexeme: &'a str, span: Span, kind: TokenKind) -> Self {
-        Self { lexeme, span, kind }
+    pub fn new(lexeme: &'a str, line: usize, span: Span, kind: TokenKind<'a>) -> Self {
+        Self {
+            lexeme,
+            line,
+            span,
+            kind,
+        }
     }
 }
 
 #[derive(Debug, PartialEq, Clone, Logos)]
-pub enum TokenKind {
+pub enum TokenKind<'a> {
     #[token(".")]
     Dot,
+
+    #[token("..")]
+    DoubleDot,
 
     #[token("...")]
     Ellipsis,
@@ -59,11 +68,14 @@ pub enum TokenKind {
     #[regex("range")]
     Range,
 
+    #[regex("len")]
+    Len,
+
     #[token("fn")]
     Fn,
 
-    #[token("opt")]
-    Opt,
+    #[token("?")]
+    Query,
 
     #[token("let")]
     Let,
@@ -74,9 +86,10 @@ pub enum TokenKind {
     #[token("break")]
     Break,
 
-    #[token("continue")]
-    Continue,
-
+    // XXX: should we implement continue using gotos?
+    // #[token("continue")]
+    // Continue,
+    //
     #[token("and")]
     And,
 
@@ -104,8 +117,8 @@ pub enum TokenKind {
     #[token("return")]
     Return,
 
-    #[token("lua")]
-    Lua,
+    #[regex(r"lua[\s\f]+\{", scan_lua_block)]
+    Lua(&'a str),
 
     #[token("true")]
     True,
@@ -116,19 +129,18 @@ pub enum TokenKind {
     #[token("nil")]
     Nil,
 
-    #[regex("[0-9]+(\\.[0-9]+)?", |lex| lex.slice().parse())]
-    Number(Number),
+    #[regex("[0-9]+(\\.[0-9]+)?")]
+    Number,
+
+    #[regex("f\"([^\"\\\\]|\\\\.)*\"", interpolated_string)]
+    #[regex("f'([^'\\\\]|\\\\.)*'", interpolated_string)]
+    InterpolatedString(Vec<Frag<'a>>),
 
     #[regex("\"([^\"\\\\]|\\\\.)*\"")]
     #[regex("'([^'\\\\]|\\\\.)*'")]
     StringLiteral,
 
-    #[regex("f\"([^\"\\\\]|\\\\.)*\"")]
-    #[regex("f'([^'\\\\]|\\\\.)*'")]
-    InterpolatedString,
-
-    #[token("ether")]
-    #[token("!")]
+    #[token("not")]
     Not,
 
     #[token("*")]
@@ -136,6 +148,9 @@ pub enum TokenKind {
 
     #[token("/")]
     Slash,
+
+    #[token("\\")]
+    BackSlash,
 
     #[token("%")]
     Percent,
@@ -185,6 +200,9 @@ pub enum TokenKind {
     #[token("/=")]
     SlashEqual,
 
+    #[token("\\=")]
+    BackSlashEqual,
+
     #[token("%=")]
     PercentEqual,
 
@@ -194,20 +212,28 @@ pub enum TokenKind {
     #[regex(r"/\*", multi_line_comment)]
     MultilineComment,
 
-    #[regex(r"\n")]
-    NewLine,
+    #[regex("\n")]
+    EOL,
+
+    #[regex("\n[\n]+", |lex| lex.slice().len())]
+    EOLSeq(usize),
+
+    #[regex(r"[ \t\f]+", logos::skip)]
+    Whitespace,
 
     #[error]
-    #[regex(r"[ \t\f]+", logos::skip)]
     Error,
 
+    FragStart,
+    FragEnd,
     EOF,
 }
 
-fn multi_line_comment(lex: &mut logos::Lexer<TokenKind>) -> bool {
+fn multi_line_comment<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> bool {
     let mut n = 0;
     let mut prev_star = false;
     let mut closed = false;
+
     for ch in lex.remainder().chars() {
         n += 1;
         if ch == '*' {
@@ -221,10 +247,142 @@ fn multi_line_comment(lex: &mut logos::Lexer<TokenKind>) -> bool {
     }
 
     if closed {
-        lex.bump(n);
+        lex.bump(n - 1);
         true
     } else {
         false
+    }
+}
+
+#[derive(Clone)]
+pub enum Frag<'a> {
+    Str(Token<'a>),
+    Sublexer(logos::Lexer<'a, TokenKind<'a>>),
+}
+
+impl<'a> std::fmt::Debug for Frag<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Str(tok) =>
+                    if f.alternate() {
+                        format!("{:#?}", tok)
+                    } else {
+                        format!("{:?}", tok)
+                    },
+                Self::Sublexer(_) => "Frag::Lexer(*)".to_owned(),
+            }
+        )
+    }
+}
+
+impl<'a> PartialEq for Frag<'a> {
+    fn eq(&self, other: &Frag<'a>) -> bool {
+        match (self, other) {
+            (Self::Str(l), Self::Str(r)) => l.lexeme == r.lexeme,
+            _ => false,
+        }
+    }
+}
+
+fn interpolated_string<'a>(
+    lex: &mut logos::Lexer<'a, TokenKind<'a>>,
+) -> Result<Vec<Frag<'a>>, String> {
+    let global_start = lex.span().start;
+    let source = lex.source();
+
+    let mut frags = vec![];
+
+    let chars = lex.slice().chars().collect::<Vec<_>>();
+
+    // Skip the `f` and the opening quote.
+    let mut i = 2;
+    let mut prev_fragment_end = 2;
+
+    while i < chars.len() - 1 {
+        if chars[i] == '{' {
+            // An unescaped fragment
+            if chars.get(i - 1) != Some(&'\\') {
+                let span = Span {
+                    start: global_start + prev_fragment_end,
+                    end: global_start + i,
+                };
+                frags.push(Frag::Str(Token::new(
+                    &source[span.clone()],
+                    0,
+                    span,
+                    TokenKind::StringLiteral,
+                )));
+
+                let frag_start = i + 1;
+                while i < chars.len() && chars[i] != '}' {
+                    i += 1;
+                }
+                let span = Span {
+                    start: global_start + frag_start,
+                    end: global_start + i,
+                };
+
+                frags.push(Frag::Sublexer(TokenKind::lexer(&source[span])));
+
+                prev_fragment_end = i + 1;
+            } else {
+                let span = Span {
+                    start: global_start + prev_fragment_end,
+                    end: global_start + i - 1, // exclude the escape
+                };
+
+                frags.push(Frag::Str(Token::new(
+                    &source[span.clone()],
+                    0,
+                    span,
+                    TokenKind::StringLiteral,
+                )));
+                prev_fragment_end = i;
+            }
+        }
+        i += 1;
+    }
+
+    if prev_fragment_end < chars.len() - 1 {
+        let span = Span {
+            start: global_start + prev_fragment_end,
+            end: global_start + chars.len() - 1,
+        };
+        frags.push(Frag::Str(Token::new(
+            &source[span.clone()],
+            0,
+            span,
+            TokenKind::StringLiteral,
+        )))
+    }
+
+    Ok(frags)
+}
+
+fn scan_lua_block<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> Result<&'a str, String> {
+    let start = lex.span().end;
+    let mut n = 0;
+
+    let mut n_opened = 1;
+
+    for ch in lex.remainder().chars() {
+        n += 1;
+        if ch == '}' {
+            n_opened -= 1;
+            if n_opened == 0 {
+                break;
+            }
+        }
+    }
+
+    if n_opened == 0 {
+        lex.bump(n);
+        Ok(&lex.source()[start..start + n - 1])
+    } else {
+        Err(String::from("Unterminated lua block"))
     }
 }
 
@@ -234,32 +392,55 @@ mod tests {
 
     #[test]
     fn test_lexer() {
+        //         let source = r#"
+        // print hello;
+        // lua {
+        //     for i = 1, 10 then
+        //         print(tostring(i) .. "test")
+        //     end
+        // }
+        // let _ = end;"#;
+        //         let source = r#""f abc";
+        // f"";
+        // f" ";
+        // f"one";
+        // f" two";
+        // f"three ";
+        // f"\{ escaped }";
+        // f"{}";
+        // f"{a}";
+        // f" {b}";
+        // f"{c} ";
+        // f"{d}{e}";
+        // f"{d * f(35)} {e + 1}";"#;
         let source = r#"
-        // We can disable the commands that require an API that is not available.
-        /* 
-        A multi-line comment
-        */
-/*
-let a =  -1;
-let b = 2 + 2;
-let c = 3 * 3;
-let d = 4 / 4;
-let e = 4 // 4;
-let f = 5 ** 5;
-let g = 6 % 7;
-// let h = (7 << 8) & ~(9 >> 10) | 3;
-let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
+                // We can disable the commands that require an API that is not available.
+                /*
+                A multi-line comment
+                */"#;
+        // /*
+        // let a =  -1;
+        // let b = 2 + 2;
+        // let c = 3 * 3;
+        // let d = 4 / 4;
+        // let e = 4 // 4;
+        // let f = 5 ** 5;
+        // let g = 6 % 7;
+        // // let h = (7 << 8) & ~(9 >> 10) | 3;
+        // let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
 
-let arr = [1, 2, 3];
-let dict = {1: 2, 3: 4};
+        // let arr = [1, 2, 3];
+        // let dict = {1: 2, 3: 4};
 
-print(len(arr));
-print(len(dict));"#;
+        // print(len(arr));
+        // print(len(dict));
+        //"#;
 
         let mut lexer = TokenKind::lexer(source);
         while let Some(token) = lexer.next() {
+            println!("--- NEW TOKEN ---");
             println!("{:#?}", token);
-            println!("{:#?}", lexer.slice());
+            println!("`{}`", lexer.slice());
         }
         assert!(false);
         // assert!(false, "{:#?}", tokens);

@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 extern crate log;
 extern crate reqwest;
 extern crate serde;

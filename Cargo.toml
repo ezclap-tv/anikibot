@@ -25,3 +25,7 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "aniki"
 path = "src/main.rs"
+
+[[bin]]
+name = "ppga"
+path = "src/ppga.rs"
