@@ -6,26 +6,29 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
+extern crate better_panic;
 
 extern crate backend;
 
 use std::convert::Into;
-
 use backend::{
     lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
-    StreamElementsConfig,
+    StreamElementsConfig
 };
-use twitchchat::{Dispatcher, RateLimit, Runner, Status};
+use twitchchat::{
+    Dispatcher, RateLimit, Runner, Status
+};
 
 #[tokio::main]
 async fn main() {
+    better_panic::install();
     pretty_env_logger::init();
 
     log::info!("Creating a Lua instance.");
     let lua = mlua::Lua::new();
 
     let dispatcher = Dispatcher::new();
-    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::default());
+    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::full(1, std::time::Duration::from_secs(1)));
 
     let secrets = Secrets::get();
 
@@ -37,7 +40,7 @@ async fn main() {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
             let (api, handle) =
-                StreamElementsAPI::new(StreamElementsConfig::with_token(key.to_owned()).unwrap())
+                StreamElementsAPI::with_config(StreamElementsConfig::with_token(key.to_owned()).unwrap())
                     .start(tokio::runtime::Handle::current())
                     .await
                     .expect("Failed to start thread");
@@ -47,16 +50,16 @@ async fn main() {
         }
         if let Some(ref key) = secrets.youtube_api_key {
             let (api, handle) =
-                YouTubePlaylistAPI::new(key.to_owned()).start(tokio::runtime::Handle::current());
+                YouTubePlaylistAPI::with_api_key(key.to_owned()).start(tokio::runtime::Handle::current());
             thread_handles.push(handle);
             builder = builder.add_youtube_api(api);
         }
 
         builder.build(&lua)
     };
-    init_globals(&lua, bot.get_api_storage());
+    init_globals(&lua, &bot);
 
-    let bot_done = bot.run(dispatcher);
+    let bot_done = bot.run(&lua, dispatcher);
 
     log::info!("Connecting to twitch...");
     let conn = twitchchat::connect_tls(&secrets.into()).await.unwrap();

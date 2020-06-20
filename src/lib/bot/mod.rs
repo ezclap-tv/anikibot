@@ -2,17 +2,14 @@ pub mod command;
 pub mod config;
 pub mod util;
 
-use std::collections::HashMap;
-use std::iter::FromIterator;
-
-use tokio::stream::StreamExt as _;
-use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
-use mlua::{UserData, UserDataMethods};
-
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
 use command::{load_commands, Command};
+use mlua::{UserData, UserDataMethods};
+use std::collections::HashMap;
+use tokio::stream::StreamExt as _;
+use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
 /* Previously had commands: ping, ping uptime, whoami, song, song queue */
 
@@ -54,7 +51,7 @@ impl BotBuilder {
 pub struct Bot<'lua> {
     pub streamelements: Option<ConsumerStreamElementsAPI>,
     pub youtube_playlist: Option<ConsumerYouTubePlaylistAPI>,
-    control: Control, // exposed through Bot::stop
+    control: Control,
     config: config::BotConfig,
     pub start: chrono::DateTime<chrono::Utc>,
     pub commands: HashMap<String, Command<'lua>>,
@@ -69,10 +66,14 @@ impl<'lua> Bot<'lua> {
         }
     }
 
+    pub fn get_bot_info(&self) -> BotInfo {
+        BotInfo { start: self.start }
+    }
+
     pub fn get_api_storage(&self) -> APIStorage {
         APIStorage {
             streamelements: self.streamelements.clone(),
-            youtube_playlist: self.youtube_playlist.clone()
+            youtube_playlist: self.youtube_playlist.clone(),
         }
     }
 
@@ -81,12 +82,11 @@ impl<'lua> Bot<'lua> {
         self.config.gym_staff.contains(name)
     }
 
-    pub async fn run(mut self, dispatcher: Dispatcher) {
+    pub async fn run(mut self, lua: &mlua::Lua, dispatcher: Dispatcher) {
         let mut events = dispatcher.subscribe::<events::All>();
 
         let ready = dispatcher.wait_for::<events::IrcReady>().await.unwrap();
 
-        // I give up, how do you do this without a clone? LULW
         self.join_configured_channels(&ready.nickname).await;
 
         self.send(
@@ -96,12 +96,9 @@ impl<'lua> Bot<'lua> {
         .await;
 
         while let Some(event) = events.next().await {
-            match &*event {
-                messages::AllCommands::Privmsg(msg) => {
-                    self.handle_msg(msg).await;
-                }
-                _ => {}
-            }
+            if let messages::AllCommands::Privmsg(msg) = &*event {
+                self.handle_msg(msg, lua).await;
+            };
         }
     }
 
@@ -109,7 +106,7 @@ impl<'lua> Bot<'lua> {
         self.control.stop();
     }
 
-    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>) {
+    async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>, lua: &'lua mlua::Lua) {
         if !evt.data.starts_with("xD") {
             return;
         }
@@ -127,41 +124,30 @@ impl<'lua> Bot<'lua> {
 
         if evt.data.starts_with("xD reload ") && self.is_boss(&evt.name) {
             let _message = util::strip_prefix(&evt.data, "xD reload ");
-            // reload the command
+            match util::reload_command(&mut self.commands, _message, |cmd| {
+                util::load_file(&cmd.path)
+                    .and_then(|source| command::load_lua(&lua, _message, &source))
+                    .map(|script| cmd.script = script)
+                    .map_err(|e| e.inner)
+            }) {
+                Ok(_) => {
+                    self.send(
+                        &evt.channel,
+                        format!("👉 Successfully reloaded `{}`", _message),
+                    )
+                    .await
+                }
+                Err(e) => {
+                    log::error!("Failed to reload `{}`: {}", _message, e);
+                    self.send(&evt.channel, "WAYTOODANK ❗❗ something broke".to_owned())
+                        .await;
+                }
+            }
             return;
         }
 
         // Not the most clean and fragrant piece code
         // but demonstrates the usage of tokio::spawn.
-        if evt.data.starts_with("xD queue") && self.is_boss(&evt.name) {
-            let parts: Vec<String> = evt
-                .data
-                .split_whitespace()
-                .skip(2)
-                .map(String::from)
-                .collect();
-            let yt = self.youtube_playlist.clone().unwrap();
-            let se = self.streamelements.clone().unwrap();
-            tokio::spawn(async move {
-                let id = parts.first().unwrap();
-                let num = parts.last().unwrap().parse::<usize>().unwrap();
-                yt.configure(id.to_owned(), num).await.unwrap();
-                let song_urls = yt
-                    .get_playlist_videos()
-                    .await
-                    .unwrap()
-                    .into_videos()
-                    .unwrap()
-                    .into_iter()
-                    .map(|v| v.into_url())
-                    .collect();
-                log::trace!(
-                    "{:?}",
-                    se.song_requests().queue_many(song_urls).await.unwrap()
-                );
-            });
-            return;
-        }
 
         if evt.data.starts_with("xD help ") {
             let name = util::strip_prefix(&evt.data, "xD help ");
@@ -179,22 +165,32 @@ impl<'lua> Bot<'lua> {
 
         let message = util::strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = util::find_command(&self.commands, message) {
-            let args: mlua::Variadic<String> = if let Some(args) = args {
-                mlua::Variadic::from_iter(args.into_iter().map(|it| it.to_owned()))
+            // TODO: make lua state Arc<RwLock<Lua>>
+            // so that we can send mlua::Function between threads
+            // enabling us to spawn tasks for expensive commands
+            /*
+            if command.is_expensive {
+                // spawn task for command
             } else {
-                mlua::Variadic::new()
-            };
-            let response = (command.script)
-                .call_async::<mlua::Variadic<String>, String>(args)
-                .await;
-            let response = match response {
-                Ok(response) => response,
+                // execute the command here
+            }
+            */
+            let response = match command
+                .script
+                .clone()
+                .call_async::<mlua::Variadic<String>, Option<String>>(util::format_args(evt, args))
+                .await
+            {
+                Ok(resp) if resp.is_none() => {
+                    return;
+                }
+                Ok(resp) => resp.unwrap(),
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);
-                    format!("WAYTOODANK devs broke something!")
+                    "WAYTOODANK devs broke something!".to_owned()
                 }
             };
-            self.send(&evt.channel, response).await;
+            self.send(&evt.channel.clone(), response).await;
         }
     }
 
@@ -245,9 +241,25 @@ impl<'lua> Bot<'lua> {
     }
 }
 
-pub fn init_api_globals<'lua>(lua: &'lua mlua::Lua, api: APIStorage) {
-    if let Err(e) = lua.globals().set("api", api) {
-        log::error!("Failed to set global object \"api\": {}", e);
+pub fn init_api_globals(lua: &mlua::Lua, api: APIStorage, bot: BotInfo) {
+    let globals = lua.globals();
+    if let Err(e) = globals.set("api", api) {
+        panic!(format!("{}", e));
+    }
+    if let Err(e) = globals.set("bot", bot) {
+        panic!(format!("{}", e));
+    }
+}
+
+pub struct BotInfo {
+    pub start: chrono::DateTime<chrono::Utc>,
+}
+
+impl UserData for BotInfo {
+    fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method("uptime", |_, instance, ()| {
+            Ok(util::duration_format(chrono::Utc::now() - instance.start))
+        });
     }
 }
 

@@ -17,7 +17,7 @@ macro_rules! api_send {
 macro_rules! resp_str {
     ($resp:expr) => {
         $resp
-            .map(|res| crate::stream_elements::communication::APIResponseMessage::Str(res))
+            .map(crate::stream_elements::communication::APIResponseMessage::Str)
             .map_err(|e| {
                 log::error!(
                     "Caught an error while processing a StreamElements API request: {:#?}",
@@ -38,7 +38,7 @@ macro_rules! resp_json {
     };
     (json => $resp:expr) => {
         $resp
-            .map(|res| crate::stream_elements::communication::APIResponseMessage::Json(res))
+            .map(crate::stream_elements::communication::APIResponseMessage::Json)
             .map_err(|e| {
                 log::error!(
                     "Caught an error while processing a StreamElements API request: {:#?}",
