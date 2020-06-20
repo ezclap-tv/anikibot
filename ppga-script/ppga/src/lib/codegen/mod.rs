@@ -4,9 +4,12 @@
 //!
 //! ```
 //! extern crate ppga;
-//! use ppga::{frontend::{Parser, lexer}, codegen::emit_lua};
+//! use ppga::{frontend::{Parser, lexer}, codegen::emit_lua, config::PPGAConfig};
 //!
-//! let ast = Parser::new(lexer("fn f() { return 5; }")).parse().unwrap();
+//! let ast = Parser::with_config(
+//!     PPGAConfig::default().disable_std(),
+//!     lexer("fn f() { return 5; }")
+//! ).parse().unwrap();
 //! let output = emit_lua(&ast);
 //! assert_eq!(output,
 //! r#"local function f()

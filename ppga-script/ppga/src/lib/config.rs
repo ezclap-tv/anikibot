@@ -30,3 +30,13 @@ impl Default for PPGAConfig {
         }
     }
 }
+
+impl PPGAConfig {
+    /// Sets `include_ppga_std` to `false`.
+    pub fn disable_std(self) -> Self {
+        Self {
+            include_ppga_std: false,
+            ..self
+        }
+    }
+}

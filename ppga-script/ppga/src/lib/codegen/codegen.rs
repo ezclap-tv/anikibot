@@ -4,9 +4,12 @@
 //!
 //! ```
 //! extern crate ppga;
-//! use ppga::{frontend::{Parser, lexer}, codegen::emit_lua};
+//! use ppga::{frontend::{Parser, lexer}, codegen::emit_lua, config::PPGAConfig};
 //!
-//! let ast = Parser::new(lexer("fn f() { return 5; }")).parse().unwrap();
+//! let ast = Parser::with_config(
+//!     PPGAConfig::default().disable_std(),
+//!     lexer("fn f() { return 5; }")
+//! ).parse().unwrap();
 //! let output = emit_lua(&ast);
 //! assert_eq!(output,
 //! r#"local function f()
@@ -20,9 +23,12 @@ use crate::{codegen::code_builder::*, config::PPGAConfig, frontend::ast::*};
 
 /// ```
 /// # extern crate ppga;
-/// use ppga::{frontend::{Parser, lexer}, codegen::emit_lua};
+/// use ppga::{frontend::{Parser, lexer}, codegen::emit_lua, config::PPGAConfig};
 ///
-/// let ast = Parser::new(lexer("fn f() { return 5; }")).parse().unwrap();
+/// let ast = Parser::with_config(
+///     PPGAConfig::default().disable_std(),
+///     lexer("fn f() { return 5; }")
+/// ).parse().unwrap();
 /// let output = emit_lua(&ast);
 /// assert_eq!(output,
 /// r#"local function f()
@@ -53,7 +59,7 @@ pub fn emit_lua<'a>(ast: &AST<'a>) -> String {
 /// let var = Ptr::new(Expr::new(ExprKind::Variable("x")));
 /// let expr = Ptr::new(Expr::new(ExprKind::Unary("-", var.clone())));
 /// let stmt = Stmt::new(StmtKind::Assignment(var, "=", expr));
-/// let result = stmt_to_lua(&stmt, &PPGAConfig::default(), 0);
+/// let result = stmt_to_lua(&stmt, &PPGAConfig::default().disable_std(), 0);
 /// assert_eq!(result, "x = -(x)");
 /// ```
 pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> String {
@@ -240,7 +246,7 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> St
 /// use ppga::{frontend::ast::*, codegen::expr_to_lua, config::PPGAConfig};
 ///
 /// let expr = Expr::new(ExprKind::Unary("-", Ptr::new(Expr::new(ExprKind::Variable("x")))));
-/// let result = expr_to_lua(&expr, &PPGAConfig::default(), 0);
+/// let result = expr_to_lua(&expr, &PPGAConfig::default().disable_std(), 0);
 /// assert_eq!(result, "-(x)");
 /// ```
 pub fn expr_to_lua<'a>(expr: &Expr<'a>, config: &PPGAConfig, depth: usize) -> String {
@@ -419,12 +425,47 @@ mod tests {
     use crate::frontend::{lexer, parser::*};
     use logos::Logos;
 
-    #[cfg(ignore)]
+    #[test]
     fn test_codegen() {
-        let source = r#""#;
+        let source = r#"
+fn some_api_request() {
+    return "ok", nil;
+}
+
+let ok = some_api_request()?;
+print(f"ok: {ok}");
+
+let val = nil;
+let res = val ?? 42;
+print(f"res: {res}");"#;
+        let expected = r#"-- PPGA STD SYMBOLS
+function __PPGA_INTERNAL_DEFAULT(x, default) 
+    if x ~= nil then return (x) end
+    return (default)
+end
+-- END PPGA STD SYMBOLS
+
+
+local function some_api_request()
+    return ("ok"), (nil)
+end
+
+local ok = nil
+do
+    local _ok_L5S77, _err_L5S77 = some_api_request()
+    if _err_L5S77 ~= nil then
+        return (_err_L5S77)
+    end
+    ok = _ok_L5S77
+end
+print("ok: " .. tostring(ok))
+
+local val = nil
+local res = __PPGA_INTERNAL_DEFAULT(val, 42)
+print("res: " .. tostring(res))"#;
         let parser = Parser::new(lexer(source));
         let ast = parser.parse().map_err(|e| e.report_all()).unwrap();
         let lua = emit_lua(&ast);
-        assert!(false, "{}", lua);
+        assert_eq!(expected, lua);
     }
 }
