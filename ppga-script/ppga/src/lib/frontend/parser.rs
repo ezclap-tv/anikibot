@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
         }
 
         let stmt = if let Some(query) = perform_error_expansion {
-            // Generate a let statement that initialize the variable to nil
+            // Generate a let statement that initializes the variable to nil
             let target_var = names.first().unwrap().lexeme;
             let decl = stmt!(
                 self,
