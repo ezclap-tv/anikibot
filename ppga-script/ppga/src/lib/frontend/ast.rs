@@ -41,6 +41,7 @@ pub enum ExprKind<'a> {
     LuaBlock(&'a str),
     Literal(&'a str, bool),
     Variable(&'a str),
+    GeneratedVariable(String),
     Param(&'a str, bool),
     FString(Vec<Expr<'a>>),
     Get(ExprPtr<'a>, &'a str, bool),
@@ -73,17 +74,26 @@ pub struct ForLoop<'a> {
     pub condition: ForCondition<'a>,
     pub body: StmtPtr<'a>,
 }
+
+#[derive(Debug, Clone)]
+pub enum VarName<'a> {
+    Borrowed(&'a str),
+    Owned(String),
+}
+
 #[derive(Debug, Clone)]
 pub enum StmtKind<'a> {
     If(ExprPtr<'a>, StmtPtr<'a>, Option<StmtPtr<'a>>),
     For(ForLoop<'a>),
     While(ExprPtr<'a>, StmtPtr<'a>),
     Block(Vec<Stmt<'a>>, bool),
+    /// Used for inserting multiple statements without generating a block.
+    StmtSequence(Vec<Stmt<'a>>),
     Return(Vec<Expr<'a>>),
     ExprStmt(ExprPtr<'a>),
     Assignment(ExprPtr<'a>, &'a str, ExprPtr<'a>),
     FuncDecl(VarKind, Ptr<Function<'a>>),
-    VarDecl(VarKind, Vec<&'a str>, Option<ExprPtr<'a>>),
+    VarDecl(VarKind, Vec<VarName<'a>>, Option<ExprPtr<'a>>),
     Break,
     NewLine(usize),
 }

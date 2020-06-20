@@ -155,6 +155,11 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> St
             }
             code.push_and_pad("end", depth);
         }
+        StmtKind::StmtSequence(stmts) => {
+            for stmt in stmts {
+                code.push(stmt_to_lua(stmt, config, depth));
+            }
+        }
         StmtKind::Return(values) => {
             code.push_and_pad(
                 format!(
@@ -201,7 +206,14 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> St
                         VarKind::Local => "local ",
                         VarKind::Global => "",
                     },
-                    names.join(", "),
+                    names
+                        .iter()
+                        .map(|v| match v {
+                            VarName::Borrowed(b) => b.to_string(),
+                            VarName::Owned(o) => o.clone(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     match value {
                         Some(ref expr) => format!(" = {}", expr_to_lua(expr, config, depth)),
                         None => String::new(),
@@ -262,6 +274,9 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, config: &PPGAConfig, depth: usize) -> St
             });
         }
         ExprKind::Variable(v) | ExprKind::Param(v, _) => {
+            code.append(v.to_string());
+        }
+        ExprKind::GeneratedVariable(v) => {
             code.append(v.to_string());
         }
         ExprKind::FString(frags) => {

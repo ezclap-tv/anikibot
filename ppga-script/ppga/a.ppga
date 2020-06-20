@@ -2,8 +2,8 @@ fn some_api_request() {
     return "ok", nil;
 }
 
-// let ok = some_api_request()?;
-// print(f"ok: {ok}");
+let ok = some_api_request()?;
+print(f"ok: {ok}");
 
 let val = nil;
 let res = val ?? 42;

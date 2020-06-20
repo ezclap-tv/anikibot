@@ -161,19 +161,89 @@ impl<'a> Parser<'a> {
                     "Global variables must be assigned a value",
                 ));
             }
+            if self.r#match(TokenKind::Query) {
+                let token = self.previous().clone();
+                self.ex.record(ParseError::new(
+                    token.line,
+                    token.span,
+                    "Cannot use `?` without an initializer",
+                ));
+            }
+
             None
         };
+
+        let perform_error_expansion = self.consume(TokenKind::Query, "").ok();
         self.consume_semicolon("Expected a `;` after the variable declaration")?;
 
-        Ok(stmt!(
-            self,
-            StmtKind::VarDecl(
-                kind,
-                // XXX: Should we lint using varidics in var declarations?
-                names.into_iter().map(|n| n.lexeme).collect(),
-                initializer
+        if perform_error_expansion.is_some() && names.len() != 1 {
+            let q = perform_error_expansion.unwrap();
+            return Err(ParseError::new(
+                q.line,
+                q.span,
+                "Cannot use `?` with more than one variable name.",
+            ));
+        }
+
+        let stmt = if let Some(query) = perform_error_expansion {
+            // Generate a let statement that initialize the variable to nil
+            let target_var = names.first().unwrap().lexeme;
+            let decl = stmt!(
+                self,
+                StmtKind::VarDecl(
+                    kind,
+                    vec![VarName::Borrowed(target_var)],
+                    Some(Ptr::new(make_literal!("nil")))
+                )
+            );
+            let ok_name = format!("_ok_L{}S{}", query.line, query.span.start);
+            let err_name = format!("_err_L{}S{}", query.line, query.span.start);
+            let err_var = owned_var!(err_name.clone());
+            let ok_var = owned_var!(ok_name.clone());
+            let block = make_block!(
+                true,
+                // Generate the tuple destruction statement:
+                // let ok, err = <initializer>;
+                stmt!(
+                    self,
+                    StmtKind::VarDecl(
+                        kind,
+                        vec![VarName::Owned(ok_name), VarName::Owned(err_name)],
+                        initializer
+                    )
+                ),
+                // Check if the error is `nil` and return the error if it is
+                stmt!(
+                    self,
+                    StmtKind::If(
+                        make_binary!(alloc => err_var.clone(), "!=", make_literal!("nil")),
+                        Ptr::new(make_block!(false, make_return!(err_var))),
+                        None
+                    )
+                ),
+                // Assign the ok to the variable
+                stmt!(
+                    self,
+                    StmtKind::Assignment(Ptr::new(make_var!(target_var)), "=", Ptr::new(ok_var))
+                )
+            );
+
+            stmt!(self, StmtKind::StmtSequence(vec![decl, block]))
+        } else {
+            stmt!(
+                self,
+                StmtKind::VarDecl(
+                    kind,
+                    // XXX: Should we lint the usage of variadics in var declarations?
+                    names
+                        .into_iter()
+                        .map(|n| VarName::Borrowed(n.lexeme))
+                        .collect(),
+                    initializer
+                )
             )
-        ))
+        };
+        Ok(stmt)
     }
 
     fn block(&mut self, is_standalone: bool) -> StmtRes<'a> {
