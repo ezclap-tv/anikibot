@@ -1,0 +1,19 @@
+let yt = api:youtube_playlist()?;
+let se = api:streamelements()?;
+let sr = se:song_requests();
+let args = util:dbg(util:get_args(@));
+
+let playlist = args[0];
+if playlist == nil {
+    return "A playlist link was not provided";
+}
+let num_songs = args[1] ?? 10;
+
+util:info(f"Queueing {num_songs} from {playlist}");
+
+let _ = yt:configure(playlist, num_songs)?;
+let song_urls = yt:get_playlist_videos()?;
+let _ = sr:queue_many(song_urls)?;
+
+return f"CheemJam successfully queued {len(song_urls)} songs";
+

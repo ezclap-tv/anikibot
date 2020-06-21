@@ -760,8 +760,8 @@ impl<'a> Parser<'a> {
             }
             TokenKind::EOF => {
                 return Err(ParseError::new(
-                    self.line,
-                    token.span,
+                    self.eof.line,
+                    self.eof.span.clone(),
                     format!(
                         "Reached the end of the script, last seen token was {:?}",
                         self.previous().kind
@@ -794,7 +794,10 @@ impl<'a> Parser<'a> {
                         exprs.push(expr!(self, ExprKind::Literal(s.lexeme, true)));
                     }
                     Frag::Sublexer(lex) => {
-                        let expr = Parser::new(lex).expression()?;
+                        let expr = Parser::new(lex).expression().map_err(|mut e| {
+                            e.span.line = self.previous().line;
+                            e
+                        })?;
                         exprs.push(expr);
                     }
                 }

@@ -1,8 +1,3 @@
-let se = api:streamelements();
-if se == nil {
-    util:error("StreamElements API is unavailable");
-    return "StreamElements API is not configured";
-}
-
+let se = api:streamelements()?;
 let ok = api:streamelements():song_requests():current_song()?;
 return f"CheemJam now playing {ok.title} [ https://youtu.be/{ok.videoId} ]";

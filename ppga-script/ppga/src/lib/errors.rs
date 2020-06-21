@@ -2,9 +2,9 @@ use logos::Span;
 
 #[derive(Debug, Clone)]
 pub struct LineSpan {
-    start: usize,
-    end: usize,
-    line: usize,
+    pub start: usize,
+    pub end: usize,
+    pub line: usize,
 }
 
 #[derive(Debug, Clone)]
