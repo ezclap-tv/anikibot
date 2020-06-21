@@ -35,6 +35,7 @@ dependencies = [
  "log",
  "logos",
  "mlua",
+ "ppga",
  "pretty_env_logger",
  "reqwest",
  "serde 1.0.112",
@@ -920,6 +921,14 @@ name = "pkg-config"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05da548ad6865900e60eaba7f589cc0783590a92e940c26953ff81ddbab2d677"
+
+[[package]]
+name = "ppga"
+version = "0.3.0"
+dependencies = [
+ "log",
+ "logos",
+]
 
 [[package]]
 name = "ppv-lite86"

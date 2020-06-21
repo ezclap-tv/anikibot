@@ -1,11 +1,15 @@
+//! Implements the PPGA parser using the recursive descent algorithm and an EBNF-like grammar .
 use logos::Lexer as RawLexer;
 
-use super::{ast::*, errors::*, lexer::*};
+use super::{super::errors::*, ast::*, lexer::*};
+use crate::{codegen::snippets::DEFAULT_OP_NAME, PPGAConfig};
 
+/// The lexer type expected by the parser.
 pub type Lexer<'a> = RawLexer<'a, TokenKind<'a>>;
 type ExprRes<'a> = Result<Expr<'a>, ParseError>;
 type StmtRes<'a> = Result<Stmt<'a>, ParseError>;
 
+/// A recursive descent PPGA parser.
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     previous: Token<'a>,
@@ -15,10 +19,11 @@ pub struct Parser<'a> {
     ex: ErrCtx<'a>,
     /// The comments encountered since the last statement
     comments: Vec<Comment<'a>>,
-    emit_comments: bool,
+    config: PPGAConfig,
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a new parser from the given lexer.
     pub fn new(lexer: Lexer<'a>) -> Self {
         let ex = ErrCtx::new(lexer.source());
 
@@ -37,18 +42,22 @@ impl<'a> Parser<'a> {
             line: 0,
             ex,
             comments: Vec::new(),
-            emit_comments: true,
+            config: PPGAConfig::default(),
         };
         // Scan the first two tokens
         p.advance();
         p
     }
 
-    pub fn emit_comments(mut self, emit: bool) -> Self {
-        self.emit_comments = emit;
-        self
+    /// Creates a new parser from the given config and lexer.
+    pub fn with_config(config: PPGAConfig, lexer: Lexer<'a>) -> Self {
+        Self {
+            config,
+            ..Self::new(lexer)
+        }
     }
 
+    /// Consumes the parser, returning either the parsed AST or the list of encountered errors.
     pub fn parse(mut self) -> Result<AST<'a>, ErrCtx<'a>> {
         let mut statements = vec![];
 
@@ -68,11 +77,12 @@ impl<'a> Parser<'a> {
             Ok(AST {
                 stmts: statements,
                 comments: self.comments,
+                config: self.config,
             })
         }
     }
 
-    pub fn statement(&mut self) -> Result<Stmt<'a>, ParseError> {
+    fn statement(&mut self) -> Result<Stmt<'a>, ParseError> {
         if self.match_any(&[TokenKind::Let, TokenKind::Global]) {
             self.var_declaration()
         } else if self.r#match(TokenKind::LeftBrace) {
@@ -106,7 +116,6 @@ impl<'a> Parser<'a> {
                 TokenKind::EOLSeq(n) => n,
                 _ => unreachable!("{:#?}", self.previous()),
             };
-            self.bump_line(n);
             Ok(stmt!(self, StmtKind::NewLine(if n < 2 { 0 } else { 1 })))
         } else {
             let stmt = self.assignment()?;
@@ -152,19 +161,96 @@ impl<'a> Parser<'a> {
                     "Global variables must be assigned a value",
                 ));
             }
+            if self.r#match(TokenKind::Query) {
+                let token = self.previous().clone();
+                self.ex.record(ParseError::new(
+                    token.line,
+                    token.span,
+                    "Cannot use `?` without an initializer",
+                ));
+            }
+
             None
         };
-        self.consume_semicolon("Expected a `;` after the var declaration")?;
 
-        Ok(stmt!(
-            self,
-            StmtKind::VarDecl(
-                kind,
-                // XXX: Should we lint using varidics in var declarations?
-                names.into_iter().map(|n| n.lexeme).collect(),
-                initializer
+        let perform_error_expansion = self.consume(TokenKind::Query, "").ok();
+        self.consume_semicolon("Expected a `;` after the variable declaration")?;
+
+        if perform_error_expansion.is_some() && names.len() != 1 {
+            let q = perform_error_expansion.unwrap();
+            return Err(ParseError::new(
+                q.line,
+                q.span,
+                "Cannot use `?` with more than one variable name.",
+            ));
+        }
+
+        let stmt = if let Some(query) = perform_error_expansion {
+            // Generate a let statement that initializes the variable to nil
+            let target_var = names.first().unwrap().lexeme;
+            let decl = stmt!(
+                self,
+                StmtKind::VarDecl(
+                    kind,
+                    vec![VarName::Borrowed(target_var)],
+                    Some(Ptr::new(make_literal!("nil")))
+                )
+            );
+            let ok_name = format!("_ok_L{}S{}", query.line, query.span.start);
+            let err_name = format!("_err_L{}S{}", query.line, query.span.start);
+            let err_var = owned_var!(err_name.clone());
+            let ok_var = owned_var!(ok_name.clone());
+            let block = make_block!(
+                true,
+                // Generate the tuple destruction statement:
+                // let ok, err = <initializer>;
+                stmt!(
+                    self,
+                    StmtKind::VarDecl(
+                        kind,
+                        vec![VarName::Owned(ok_name), VarName::Owned(err_name)],
+                        initializer
+                    )
+                ),
+                // Check if the error is `nil` and return the error if it is
+                stmt!(
+                    self,
+                    StmtKind::If(
+                        make_binary!(alloc => err_var.clone(), "!=", make_literal!("nil")),
+                        Ptr::new(make_block!(
+                            false,
+                            make_expr_stmt!(alloc => Expr::new(ExprKind::Call(
+                                    Ptr::new(make_get!(alloc => make_var!("util"), colon => "error")),
+                                    vec![err_var.clone()]
+                            ))),
+                            make_return!(err_var)
+                        )),
+                        None
+                    )
+                ),
+                // Assign the ok to the variable
+                stmt!(
+                    self,
+                    StmtKind::Assignment(vec![make_var!(target_var)], "=", Ptr::new(ok_var))
+                )
+            );
+
+            stmt!(self, StmtKind::StmtSequence(vec![decl, block]))
+        } else {
+            stmt!(
+                self,
+                StmtKind::VarDecl(
+                    kind,
+                    // XXX: Should we lint the usage of variadics in var declarations?
+                    names
+                        .into_iter()
+                        .map(|n| VarName::Borrowed(n.lexeme))
+                        .collect(),
+                    initializer
+                )
             )
-        ))
+        };
+        Ok(stmt)
     }
 
     fn block(&mut self, is_standalone: bool) -> StmtRes<'a> {
@@ -266,7 +352,11 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> StmtRes<'a> {
-        let expr = self.expression()?;
+        let mut exprs = vec![self.expression()?];
+
+        while self.r#match(TokenKind::Comma) {
+            exprs.push(self.expression()?);
+        }
 
         if self.match_any(&[
             TokenKind::Equal,
@@ -279,21 +369,29 @@ impl<'a> Parser<'a> {
             let span = self.previous().span.clone();
             let line = self.previous().line;
             let operator = self.previous().lexeme;
-            return match expr.kind {
-                ExprKind::Variable(_) | ExprKind::Get(_, _, false) | ExprKind::GetItem(_, _) => {
-                    Ok(stmt!(
-                        self,
-                        StmtKind::Assignment(
-                            Ptr::new(expr),
-                            operator,
-                            Ptr::new(self.expression()?)
-                        )
-                    ))
+            for expr in &exprs {
+                match expr.kind {
+                    ExprKind::Variable(_)
+                    | ExprKind::Get(_, _, false)
+                    | ExprKind::GetItem(_, _) => (),
+                    _ => return Err(ParseError::new(line, span, "Invalid assignment target")),
                 }
-                _ => Err(ParseError::new(line, span, "Invalid assignment target")),
-            };
+            }
+            return Ok(stmt!(
+                self,
+                StmtKind::Assignment(exprs, operator, Ptr::new(self.expression()?))
+            ));
         }
 
+        if exprs.len() > 1 {
+            return Err(ParseError::new(
+                self.line,
+                self.previous().span.clone(),
+                "Comma is allowed only in let, assignment, and return statements.",
+            ));
+        }
+
+        let expr = exprs.drain(0..).next().unwrap();
         Ok(stmt!(self, StmtKind::ExprStmt(Ptr::new(expr))))
     }
 
@@ -305,12 +403,18 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Number, "Expected a range stop value")?
                 .lexeme,
         );
-        if self.r#match(TokenKind::Number) {
+        if self.r#match(TokenKind::Comma) {
             start = end;
-            end = Self::as_number(self.previous().lexeme);
+            end = Self::as_number(
+                self.consume(TokenKind::Number, "Expected a range stop value")?
+                    .lexeme,
+            );
         };
-        if self.r#match(TokenKind::Number) {
-            step = Self::as_number(self.previous().lexeme);
+        if self.r#match(TokenKind::Comma) {
+            step = Self::as_number(
+                self.consume(TokenKind::Number, "Expected a range step value")?
+                    .lexeme,
+            );
         }
         self.consume(TokenKind::RightParen, "Expected a `)` after the arguments")?;
         Ok(Ptr::new(Range { start, end, step }))
@@ -320,7 +424,7 @@ impl<'a> Parser<'a> {
         if self.r#match(TokenKind::Fn) {
             Ok(expr!(self, ExprKind::Lambda(Ptr::new(self.lambda()?))))
         } else {
-            self.logic_or()
+            self.default_op()
         }
     }
 
@@ -362,6 +466,23 @@ impl<'a> Parser<'a> {
             params,
             body,
         })
+    }
+
+    fn default_op(&mut self) -> ExprRes<'a> {
+        let mut expr = self.logic_or()?;
+
+        if self.r#match(TokenKind::DoubleQuery) {
+            let right = self.logic_or()?;
+            expr = expr!(
+                self,
+                ExprKind::Call(
+                    Ptr::new(expr!(sf, ExprKind::Variable(DEFAULT_OP_NAME))),
+                    vec![expr, right]
+                )
+            );
+        }
+
+        Ok(expr)
     }
 
     fn logic_or(&mut self) -> ExprRes<'a> {
@@ -480,7 +601,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> ExprRes<'a> {
         let expr = if self.match_any(&[TokenKind::Minus, TokenKind::Not, TokenKind::Ellipsis]) {
             let operator = self.previous().lexeme;
-            let value = self.primary()?;
+            let value = self.unary()?;
             expr!(self, ExprKind::Unary(operator, Ptr::new(value)))
         } else {
             self.call()?
@@ -796,7 +917,7 @@ impl<'a> Parser<'a> {
     fn match_any(&mut self, kinds: &[TokenKind<'a>]) -> bool {
         for kind in kinds {
             if self.check(&kind) {
-                self.advance();
+                self.previous = self.advance();
                 return true;
             }
         }
@@ -873,7 +994,7 @@ impl<'a> Parser<'a> {
             token = self.advance_and_skip_newlines();
         }
 
-        if self.emit_comments {
+        if self.config.emit_comments {
             self.comments.extend(new_comments);
         }
 
@@ -883,16 +1004,21 @@ impl<'a> Parser<'a> {
     }
 
     fn advance_and_skip_newlines(&mut self) -> Token<'a> {
-        if self.current.kind == TokenKind::EOL {
-            // QQQ: do we even need this while loop? Only single EOLS can appear by themselves
-            //      so this loop seems to be redundant.
-            while self.current.kind == TokenKind::EOL {
-                self.bump_line(1);
-                self.actual_advance();
+        match self.current.kind {
+            TokenKind::EOL => {
+                // QQQ: do we even need this while loop? Only single EOLS can appear by themselves
+                //      so this loop seems to be redundant.
+                while self.current.kind == TokenKind::EOL {
+                    self.bump_line(1);
+                    self.actual_advance();
+                }
+                self.previous.clone()
             }
-            self.previous.clone()
-        } else {
-            self.actual_advance().clone()
+            TokenKind::EOLSeq(n) => {
+                self.bump_line(n);
+                self.actual_advance().clone()
+            }
+            _ => self.actual_advance().clone(),
         }
     }
 
@@ -928,60 +1054,39 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use logos::Logos;
+    use crate::frontend::lexer;
 
     #[test]
-    fn test_parser() {
-        pretty_env_logger::init();
+    fn test_comma_is_allowed_only_in_return_let_and_assignment() {
+        let sources = vec![
+            "let a, b = 3;",
+            "a, b = @;",
+            "return a, b;",
+            "a, b;",
+            "let d = a, b + 3;",
+        ];
+        let expected = vec![
+            Ok(()),
+            Ok(()),
+            Ok(()),
+            Err("Comma is allowed only in let, assignment, and return statements."),
+            Err("Expected a `;` after the variable declaration"),
+        ];
 
-        let source = r#"
-        // lel
-        a;
-        let a =  -1;
-        let b = 2 + 2;
-        let c = 3 * 3;
-        let d = 4 / 4;
-        let e = 4 \ 4;
-        let f = 5 ** 5;
-        let g = 6 % 7;
-        let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-        let arr = [1, 2, 3];
-        let dict = {1 = 2, 3 = 4};
-
-        print(len(arr));
-        print(len(dict));
-        "#;
-        //         let source = r#"
-        //         // We can disable the commands that require an API that is not available.
-        //         /*
-        //         A multi-line comment
-        //         */
-        // a;
-        // //kek
-        // let a =  -1;
-        // let b = 2 + 2;
-        // let c = 3 * 3;
-        // let d = 4 / 4;
-        // let e = 4 \ 4;
-        // let f = 5 ** 5;
-        // let g = 6 % 7;
-
-        // let i = true != false and 3 < 4 or 5 >= 6 or 3 <= 7 and 10 > 2;
-
-        // let arr = [1, 2, 3];
-        // let dict = {1 = 2, 3 = 4};
-
-        // print(len(arr));
-        // print(len(dict));"#;
-
-        let parser = Parser::new(TokenKind::lexer(source));
-        println!(
-            "{:?}",
-            parser.parse().map_err(|e| {
-                e.report_all();
-            })
-        );
-        assert!(false);
+        for (i, (s, e)) in sources.iter().zip(expected.iter()).enumerate() {
+            let parser = Parser::new(lexer(s));
+            let res = parser.parse();
+            match (e, &res) {
+                (Ok(_), Ok(_)) => (),
+                (e @ Ok(_), r @ Err(_)) | (e @ Err(_), r @ Ok(_)) => panic!(
+                    "[Test #{}] Succeeded or failed without a reason: {:#?}\nwhile expected: {:#?}",
+                    i, r, e
+                ),
+                (Err(e), Err(r)) => {
+                    r.report_all();
+                    assert_eq!(e, &r.errors[0].message);
+                }
+            }
+        }
     }
 }

@@ -4,9 +4,5 @@ if se == nil {
     return "StreamElements API is not configured";
 }
 
-let ok, err = api:streamelements():song_requests():current_song();
-if err != nil {
-    return "WAYTOODANK something broke";
-}
-
+let ok = api:streamelements():song_requests():current_song()?;
 return f"CheemJam now playing {ok.title} [ https://youtu.be/{ok.videoId} ]";

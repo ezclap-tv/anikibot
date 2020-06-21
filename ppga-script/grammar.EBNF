@@ -14,17 +14,18 @@ statement ::= var_decl
 block      ::=  "{" statement* "}" 
              ;
 fn_decl    ::= "fn" IDENTIFIER "(" params? ")" body ;
-var_decl   ::= ( "let" | "global" ) ( IDENTIFIER )+ ( "=" expression )? ";" ;
+var_decl   ::= ( "let" | "global" ) ( IDENTIFIER )+ ( "=" expression )? ( "?" )? ";" ;
 if_stmt    ::= "if" expression block ( else ( if_stmt | block ) )?;
 for_stmt   ::= ( "for" | "fori" ) IDENTIFIER ("," IDENTIFIER )* "in" ( range | arguments ) block ;
 while_stmt ::= "while" expression block;
 return     ::= "return" arguments? ;
 expr_stmt  ::= assignment ";" ;
 
-assignment      ::= IDENTIFIER ( "+=" | "-=" | "*=" | "/=", "**=" | "=" ) expression  
-                 | expression 
-                 ;
-expression      ::= logic_or | lambda_decl ;
+assignment      ::= assignable ( "," assignable )* ( "+=" | "-=" | "*=" | "/=", "**=" | "=" ) expression
+                  | expression
+                  ;
+expression      ::= default_op | lambda_decl ;
+default_op      ::= logic_or ( "??" logic_or )? ;
 logic_or        ::= logic_and ( "or" logic_and )* ;
 logic_and       ::= equality ( "and" equality )* ;
 equality        ::= comparison ( ( "!=" | "==" ) comparison )* ;
@@ -53,6 +54,7 @@ primary        ::= "nil"
                 ;
 
 
+assignable ::= IDENTIFIER | get | get_item  ;
 (* Allow an optional trailing comma *)
 params     ::= IDENTIFIER ( "?" )? ( "," IDENTIFIER ( "?" )? )* ( "," )? ;  
 arguments  ::= expression ( "," expression)* ( "," )? ;
