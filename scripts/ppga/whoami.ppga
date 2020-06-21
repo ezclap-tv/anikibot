@@ -1,0 +1,11 @@
+let args = util:get_args(@)
+
+let se = api:streamelements()
+if se == nil {
+    util:error("StreamElements API is unavailable");
+    return "WAYTOODANK something broke";
+}
+
+let channel_id = se:channels():channel_id(args.user)?;
+
+return f"monkaS 👉 your ID is {channel_id}";

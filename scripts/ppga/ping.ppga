@@ -1,0 +1,2 @@
+let uptime = bot:uptime();
+return f"FeelsDankMan 🕒 uptime is {uptime}";
