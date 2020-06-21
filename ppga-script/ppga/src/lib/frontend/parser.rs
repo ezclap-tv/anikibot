@@ -911,7 +911,7 @@ impl<'a> Parser<'a> {
     fn match_any(&mut self, kinds: &[TokenKind<'a>]) -> bool {
         for kind in kinds {
             if self.check(&kind) {
-                self.advance();
+                self.previous = self.advance();
                 return true;
             }
         }
