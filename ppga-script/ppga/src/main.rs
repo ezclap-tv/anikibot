@@ -9,6 +9,7 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 pub fn main() -> Result<(), BoxedError> {
     let args = App::new("ppga")
         .about("PPGA Script to Lua transpiler")
+        .version(env!("CARGO_PKG_VERSION"))
         .arg(
             Arg::with_name("input")
                 .required(true)
