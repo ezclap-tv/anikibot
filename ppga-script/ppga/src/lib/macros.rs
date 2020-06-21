@@ -77,3 +77,35 @@ macro_rules! owned_var {
         Expr::new(ExprKind::GeneratedVariable($name))
     }};
 }
+
+#[macro_export]
+macro_rules! make_expr_stmt {
+    ($value:expr) => {{
+        use $crate::frontend::ast::*;
+        Stmt::new(StmtKind::ExprStmt($value))
+    }};
+    (alloc => $value:expr) => {{
+        use $crate::frontend::ast::*;
+        Stmt::new(StmtKind::ExprStmt(Ptr::new($value)))
+    }};
+}
+
+#[macro_export]
+macro_rules! make_get {
+    ($obj:expr, $attr:expr) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Get($obj, $attr, false))
+    }};
+    (alloc => $obj:expr, $attr:expr) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Get(Ptr::new($obj), $attr, false))
+    }};
+    ($obj:expr, colon => $attr:expr) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Get($obj, $attr, true))
+    }};
+    (alloc => $obj:expr, colon => $attr:expr) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Get(Ptr::new($obj), $attr, true))
+    }};
+}

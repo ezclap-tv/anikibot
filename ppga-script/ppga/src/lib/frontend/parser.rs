@@ -217,7 +217,14 @@ impl<'a> Parser<'a> {
                     self,
                     StmtKind::If(
                         make_binary!(alloc => err_var.clone(), "!=", make_literal!("nil")),
-                        Ptr::new(make_block!(false, make_return!(err_var))),
+                        Ptr::new(make_block!(
+                            false,
+                            make_expr_stmt!(alloc => Expr::new(ExprKind::Call(
+                                    Ptr::new(make_get!(alloc => make_var!("util"), colon => "error")),
+                                    vec![err_var.clone()]
+                            ))),
+                            make_return!(err_var)
+                        )),
                         None
                     )
                 ),

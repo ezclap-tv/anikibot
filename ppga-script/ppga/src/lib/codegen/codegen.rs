@@ -454,6 +454,7 @@ local ok = nil
 do
     local _ok_L5S77, _err_L5S77 = some_api_request()
     if _err_L5S77 ~= nil then
+        util:error(_err_L5S77)
         return (_err_L5S77)
     end
     ok = _ok_L5S77
