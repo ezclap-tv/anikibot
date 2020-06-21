@@ -278,11 +278,11 @@ fn multi_line_comment<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> bool {
     let mut prev_star = false;
     let mut closed = false;
 
-    for ch in lex.remainder().chars() {
+    for ch in lex.remainder().bytes() {
         n += 1;
-        if ch == '*' {
+        if ch == b'*' {
             prev_star = true;
-        } else if ch == '/' && prev_star {
+        } else if ch == b'/' && prev_star {
             closed = true;
             break;
         } else {
@@ -342,16 +342,16 @@ fn interpolated_string<'a>(
 
     let mut frags = vec![];
 
-    let chars = lex.slice().chars().collect::<Vec<_>>();
+    let bytes = lex.slice().bytes().collect::<Vec<_>>();
 
     // Skip the `f` and the opening quote.
     let mut i = 2;
     let mut prev_fragment_end = 2;
 
-    while i < chars.len() - 1 {
-        if chars[i] == '{' {
+    while i < bytes.len() - 1 {
+        if bytes[i] == b'{' {
             // An unescaped fragment
-            if chars.get(i - 1) != Some(&'\\') {
+            if bytes.get(i - 1) != Some(&b'\\') {
                 let span = Span {
                     start: global_start + prev_fragment_end,
                     end: global_start + i,
@@ -364,7 +364,7 @@ fn interpolated_string<'a>(
                 )));
 
                 let frag_start = i + 1;
-                while i < chars.len() && chars[i] != '}' {
+                while i < bytes.len() && bytes[i] != b'}' {
                     i += 1;
                 }
                 let span = Span {
@@ -393,10 +393,10 @@ fn interpolated_string<'a>(
         i += 1;
     }
 
-    if prev_fragment_end < chars.len() - 1 {
+    if prev_fragment_end < bytes.len() - 1 {
         let span = Span {
             start: global_start + prev_fragment_end,
-            end: global_start + chars.len() - 1,
+            end: global_start + bytes.len() - 1,
         };
         frags.push(Frag::Str(Token::new(
             &source[span.clone()],
@@ -415,11 +415,11 @@ fn scan_lua_block<'a>(lex: &mut logos::Lexer<'a, TokenKind<'a>>) -> Result<&'a s
 
     let mut n_opened = 1;
 
-    for ch in lex.remainder().chars() {
+    for ch in lex.remainder().bytes() {
         n += 1;
-        if ch == '{' {
+        if ch == b'{' {
             n_opened += 1;
-        } else if ch == '}' {
+        } else if ch == b'}' {
             n_opened -= 1;
             if n_opened == 0 {
                 break;

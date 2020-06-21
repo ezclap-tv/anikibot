@@ -77,6 +77,7 @@ pub fn main() -> Result<(), BoxedError> {
 
     if meta.is_file() {
         return transpile_and_print_or_write(&input, output, lint_only, &config)
+            .map(|_| ())
             .map_err(BoxedError::from);
     }
 
@@ -124,11 +125,11 @@ fn transpile_and_print_or_write(
     output: Option<&str>,
     lint_only: bool,
     config: &PPGAConfig,
-) -> std::io::Result<()> {
+) -> std::io::Result<bool> {
     println!("--> File `{}`", input);
     let lua = match transpile_file(&input, &config) {
         Ok(lua) => lua,
-        Err(_) => std::process::exit(65),
+        Err(_) => return Ok(false),
     };
     if !lint_only {
         if let Some(path) = output {
@@ -138,7 +139,7 @@ fn transpile_and_print_or_write(
             println!("{}", lua);
         }
     }
-    Ok(())
+    Ok(true)
 }
 
 fn visit_dirs(dir: &std::path::Path, cb: &dyn Fn(&std::fs::DirEntry)) -> std::io::Result<()> {

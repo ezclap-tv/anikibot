@@ -1,7 +1,7 @@
 {
     "test": {
         "usage": "Test command",
-        "script": "scripts/test.lua",
+        "script": "scripts/ppga/test.ppga.lua",
         "commands": {
             "sub": {
                 "usage": "Test subcommand",
@@ -21,7 +21,7 @@
     },
     "ping": {
         "usage": "Shows the bot uptime",
-        "script": "scripts/ping.lua"
+        "script": "scripts/ppga/ping.ppga.lua"
     },
     "whoami": {
         "usage": "Shows your twitch channel ID",

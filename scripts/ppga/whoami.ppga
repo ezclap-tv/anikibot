@@ -1,6 +1,6 @@
-let args = util:get_args(@)
+let args = util:get_args(@);
 
-let se = api:streamelements()
+let se = api:streamelements();
 if se == nil {
     util:error("StreamElements API is unavailable");
     return "WAYTOODANK something broke";
