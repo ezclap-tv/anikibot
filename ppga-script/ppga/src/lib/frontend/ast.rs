@@ -91,7 +91,7 @@ pub enum StmtKind<'a> {
     StmtSequence(Vec<Stmt<'a>>),
     Return(Vec<Expr<'a>>),
     ExprStmt(ExprPtr<'a>),
-    Assignment(ExprPtr<'a>, &'a str, ExprPtr<'a>),
+    Assignment(Vec<Expr<'a>>, &'a str, ExprPtr<'a>),
     FuncDecl(VarKind, Ptr<Function<'a>>),
     VarDecl(VarKind, Vec<VarName<'a>>, Option<ExprPtr<'a>>),
     Break,

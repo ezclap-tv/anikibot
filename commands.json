@@ -11,7 +11,7 @@
     },
     "song": {
         "usage": "Shows the currently playing song title and link",
-        "script": "scripts/song.ppga.lua",
+        "script": "scripts/song.lua",
         "commands": {
             "queue": {
                 "usage": "song queue [playlist link] [song count : optional]. Queues songs to the streamelements media request queue",

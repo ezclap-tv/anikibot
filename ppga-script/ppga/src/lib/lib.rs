@@ -9,9 +9,10 @@ pub mod errors;
 pub mod frontend;
 
 use codegen::emit_lua;
-pub use config::PPGAConfig;
 use errors::ErrCtx;
 use frontend::{lexer, Parser};
+
+pub use config::PPGAConfig;
 
 pub fn ppga_to_lua<'a>(source: &'a str, config: PPGAConfig) -> Result<String, ErrCtx<'a>> {
     Parser::with_config(config, lexer(source.trim_end()))

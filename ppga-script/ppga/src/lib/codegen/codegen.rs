@@ -56,9 +56,9 @@ pub fn emit_lua<'a>(ast: &AST<'a>) -> String {
 /// # extern crate ppga;
 /// use ppga::{frontend::ast::*, codegen::stmt_to_lua, config::PPGAConfig};
 ///
-/// let var = Ptr::new(Expr::new(ExprKind::Variable("x")));
-/// let expr = Ptr::new(Expr::new(ExprKind::Unary("-", var.clone())));
-/// let stmt = Stmt::new(StmtKind::Assignment(var, "=", expr));
+/// let var = Expr::new(ExprKind::Variable("x"));
+/// let expr = Ptr::new(Expr::new(ExprKind::Unary("-", Ptr::new(var.clone()))));
+/// let stmt = Stmt::new(StmtKind::Assignment(vec![var], "=", expr));
 /// let result = stmt_to_lua(&stmt, &PPGAConfig::default().disable_std(), 0);
 /// assert_eq!(result, "x = -(x)");
 /// ```
@@ -187,11 +187,14 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> St
         StmtKind::ExprStmt(expr) => {
             code.push_and_pad(expr_to_lua(&expr, config, depth), depth);
         }
-        StmtKind::Assignment(obj, op, value) => {
+        StmtKind::Assignment(vars, op, value) => {
             code.push_and_pad(
                 format!(
                     "{} {} {}",
-                    expr_to_lua(&obj, config, depth),
+                    vars.iter()
+                        .map(|v| expr_to_lua(&v, config, depth))
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     match *op {
                         "**=" => format!("= {} {}", expr_to_lua(&value, config, depth), "^"),
                         rest => rest.to_string(),
@@ -439,7 +442,7 @@ let val = nil;
 let res = val ?? 42;
 print(f"res: {res}");"#;
         let expected = r#"-- PPGA STD SYMBOLS
-function __PPGA_INTERNAL_DEFAULT(x, default) 
+local function __PPGA_INTERNAL_DEFAULT(x, default) 
     if x ~= nil then return (x) end
     return (default)
 end

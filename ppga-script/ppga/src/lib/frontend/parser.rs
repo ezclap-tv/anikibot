@@ -231,7 +231,7 @@ impl<'a> Parser<'a> {
                 // Assign the ok to the variable
                 stmt!(
                     self,
-                    StmtKind::Assignment(Ptr::new(make_var!(target_var)), "=", Ptr::new(ok_var))
+                    StmtKind::Assignment(vec![make_var!(target_var)], "=", Ptr::new(ok_var))
                 )
             );
 
@@ -352,7 +352,11 @@ impl<'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> StmtRes<'a> {
-        let expr = self.expression()?;
+        let mut exprs = vec![self.expression()?];
+
+        while self.r#match(TokenKind::Comma) {
+            exprs.push(self.expression()?);
+        }
 
         if self.match_any(&[
             TokenKind::Equal,
@@ -365,21 +369,29 @@ impl<'a> Parser<'a> {
             let span = self.previous().span.clone();
             let line = self.previous().line;
             let operator = self.previous().lexeme;
-            return match expr.kind {
-                ExprKind::Variable(_) | ExprKind::Get(_, _, false) | ExprKind::GetItem(_, _) => {
-                    Ok(stmt!(
-                        self,
-                        StmtKind::Assignment(
-                            Ptr::new(expr),
-                            operator,
-                            Ptr::new(self.expression()?)
-                        )
-                    ))
+            for expr in &exprs {
+                match expr.kind {
+                    ExprKind::Variable(_)
+                    | ExprKind::Get(_, _, false)
+                    | ExprKind::GetItem(_, _) => (),
+                    _ => return Err(ParseError::new(line, span, "Invalid assignment target")),
                 }
-                _ => Err(ParseError::new(line, span, "Invalid assignment target")),
-            };
+            }
+            return Ok(stmt!(
+                self,
+                StmtKind::Assignment(exprs, operator, Ptr::new(self.expression()?))
+            ));
         }
 
+        if exprs.len() > 1 {
+            return Err(ParseError::new(
+                self.line,
+                self.previous().span.clone(),
+                "Comma is allowed only in let, assignment, and return statements.",
+            ));
+        }
+
+        let expr = exprs.drain(0..).next().unwrap();
         Ok(stmt!(self, StmtKind::ExprStmt(Ptr::new(expr))))
     }
 
@@ -1034,4 +1046,41 @@ impl<'a> Parser<'a> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use crate::frontend::lexer;
+
+    #[test]
+    fn test_comma_is_allowed_only_in_return_let_and_assignment() {
+        let sources = vec![
+            "let a, b = 3;",
+            "a, b = @;",
+            "return a, b;",
+            "a, b;",
+            "let d = a, b + 3;",
+        ];
+        let expected = vec![
+            Ok(()),
+            Ok(()),
+            Ok(()),
+            Err("Comma is allowed only in let, assignment, and return statements."),
+            Err("Expected a `;` after the variable declaration"),
+        ];
+
+        for (i, (s, e)) in sources.iter().zip(expected.iter()).enumerate() {
+            let parser = Parser::new(lexer(s));
+            let res = parser.parse();
+            match (e, &res) {
+                (Ok(_), Ok(_)) => (),
+                (e @ Ok(_), r @ Err(_)) | (e @ Err(_), r @ Ok(_)) => panic!(
+                    "[Test #{}] Succeeded or failed without a reason: {:#?}\nwhile expected: {:#?}",
+                    i, r, e
+                ),
+                (Err(e), Err(r)) => {
+                    r.report_all();
+                    assert_eq!(e, &r.errors[0].message);
+                }
+            }
+        }
+    }
+}

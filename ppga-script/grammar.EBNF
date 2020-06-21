@@ -21,9 +21,9 @@ while_stmt ::= "while" expression block;
 return     ::= "return" arguments? ;
 expr_stmt  ::= assignment ";" ;
 
-assignment      ::= IDENTIFIER ( "+=" | "-=" | "*=" | "/=", "**=" | "=" ) expression  
-                 | expression 
-                 ;
+assignment      ::= assignable ( "," assignable )* ( "+=" | "-=" | "*=" | "/=", "**=" | "=" ) expression
+                  | expression
+                  ;
 expression      ::= default_op | lambda_decl ;
 default_op      ::= logic_or ( "??" logic_or )? ;
 logic_or        ::= logic_and ( "or" logic_and )* ;
@@ -54,6 +54,7 @@ primary        ::= "nil"
                 ;
 
 
+assignable ::= IDENTIFIER | get | get_item  ;
 (* Allow an optional trailing comma *)
 params     ::= IDENTIFIER ( "?" )? ( "," IDENTIFIER ( "?" )? )* ( "," )? ;  
 arguments  ::= expression ( "," expression)* ( "," )? ;
