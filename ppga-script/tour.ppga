@@ -92,11 +92,14 @@ fori idx, value in container {
     print(idx, value);
 }
 
+// All API methods work Go-style: they return a tuple of (ok, err),
+// where either of the elements, but not both, is nil.
 fn may_fail() { 
     return nil, "error";
 }
 
 fn main() {
+    // The ? operator simplifies Go-style error hanlding.
     let ok = may_fail()?;
     // The line above will expand into the following code:
     //

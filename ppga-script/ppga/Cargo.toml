@@ -18,5 +18,5 @@ build-binary = ["clap"]
 
 [[bin]]
 name = "ppga"
-path = "src/ppga.rs"
+path = "src/main.rs"
 required-features = ["build-binary"]
