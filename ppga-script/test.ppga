@@ -2,6 +2,10 @@
     A multi-line comment
 */
 // static methods still require a colon (getting rid of this would require a type system).
+// This table is provided by the bot runtime, we're making a fake one here to make 
+// this script runnable with vanilla Lua.
+global util = {"get_args"=fn(){},"error"=fn(_,e){print(e);}};
+
 let args = util:get_args(@);
 
 let a =  -1;
@@ -63,15 +67,16 @@ g(12); // 12
 g(12, fn(x) => x * x); // 144
 
 
-for i in range(10) {
+for i in range(1, 10) {
     let fib = [0, 1];
-    // Code inside `lua` blocks is de-indented once and then directly pasted into the resulting lua file.
+    // Code inside `lua` blocks is de-indented once 
+    // and then directly pasted into the resulting lua file.
     lua {
         for j = 2, i do
             fib[j] = fib[j - 2] + fib[j - 1]
         end
     }
-    print(fib);
+    print(fib[len(fib) - 1]);
 }
 
 let container = [1, 2, 3];
@@ -86,3 +91,26 @@ for key, value in container {
 fori idx, value in container {
     print(idx, value);
 }
+
+fn may_fail() { 
+    return nil, "error";
+}
+
+fn main() {
+    let ok = may_fail()?;
+    // The line above will expand into the following code:
+    //
+    // let ok = nil
+    // { 
+    //     let _ok_L94S2015, _err_L94S2015 = ...may_fail();
+    //     if _err_L94S2015 != nil { 
+    //          util:error(_err_L94S2015);
+    //          return (_err_L94S2015);
+    //     }
+    //     ok = _ok_L94S2015;
+    // }
+    return ok;
+}
+
+let res = main();
+print(f"Main returned: {res}");

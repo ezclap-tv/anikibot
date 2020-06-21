@@ -403,12 +403,18 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::Number, "Expected a range stop value")?
                 .lexeme,
         );
-        if self.r#match(TokenKind::Number) {
+        if self.r#match(TokenKind::Comma) {
             start = end;
-            end = Self::as_number(self.previous().lexeme);
+            end = Self::as_number(
+                self.consume(TokenKind::Number, "Expected a range stop value")?
+                    .lexeme,
+            );
         };
-        if self.r#match(TokenKind::Number) {
-            step = Self::as_number(self.previous().lexeme);
+        if self.r#match(TokenKind::Comma) {
+            step = Self::as_number(
+                self.consume(TokenKind::Number, "Expected a range step value")?
+                    .lexeme,
+            );
         }
         self.consume(TokenKind::RightParen, "Expected a `)` after the arguments")?;
         Ok(Ptr::new(Range { start, end, step }))

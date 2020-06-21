@@ -385,7 +385,7 @@ pub fn expr_to_lua<'a>(expr: &Expr<'a>, config: &PPGAConfig, depth: usize) -> St
             ));
         }
         ExprKind::Lambda(r#fn) => {
-            code.append(fn_to_lua(&r#fn, VarKind::Local, config, depth));
+            code.append(fn_to_lua(&r#fn, VarKind::Local, config, depth + 1));
         }
         ExprKind::NewLine => {
             code.append("\n");
@@ -413,7 +413,10 @@ pub fn fn_to_lua<'a>(
             r#fn.name.unwrap_or(""),
             r#fn.params
                 .iter()
-                .map(|p| expr_to_lua(&p, config, depth))
+                .map(|p| match &expr_to_lua(&p, config, depth)[..] {
+                    "@" => "...".to_string(),
+                    rest => rest.to_owned(),
+                })
                 .collect::<Vec<_>>()
                 .join(", "),
         ))
