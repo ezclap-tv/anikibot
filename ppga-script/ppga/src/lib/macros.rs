@@ -34,6 +34,11 @@ macro_rules! make_literal {
         use $crate::frontend::ast::*;
         Expr::new(ExprKind::Literal($lit, false))
     }};
+
+    (str => $lit:expr) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Literal($lit, true))
+    }};
 }
 
 #[macro_export]
@@ -59,7 +64,6 @@ macro_rules! make_block {
         use $crate::frontend::ast::*;
         Stmt::new(StmtKind::Block(vec![$( $v ),*], $standalone))
     }};
-
 }
 
 #[macro_export]
@@ -74,7 +78,7 @@ macro_rules! make_var {
 macro_rules! owned_var {
     ($name:expr) => {{
         use $crate::frontend::ast::*;
-        Expr::new(ExprKind::GeneratedVariable($name))
+        Expr::new(ExprKind::GeneratedVariable($name.into()))
     }};
 }
 
@@ -107,5 +111,18 @@ macro_rules! make_get {
     (alloc => $obj:expr, colon => $attr:expr) => {{
         use $crate::frontend::ast::*;
         Expr::new(ExprKind::Get(Ptr::new($obj), $attr, true))
+    }};
+}
+
+#[macro_export]
+macro_rules! make_call {
+    ($callee: expr, $( $v:expr ),*) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Call($callee, vec![$( $v ),*]))
+    }};
+
+    (alloc => $callee: expr, $( $v:expr ),*) => {{
+        use $crate::frontend::ast::*;
+        Expr::new(ExprKind::Call(Ptr::new($callee), vec![$( $v ),*]))
     }};
 }

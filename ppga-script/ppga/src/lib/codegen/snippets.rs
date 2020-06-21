@@ -1,4 +1,5 @@
 pub const DEFAULT_OP_NAME: &'static str = "__PPGA_INTERNAL_DEFAULT";
+pub const ERR_HANDLER_NAME: &'static str = "__PPGA_INTERNAL_HANDLE_ERR";
 
 pub const fn default_op_definition() -> &'static str {
     r#"local function __PPGA_INTERNAL_DEFAULT(x, default) 
@@ -7,4 +8,14 @@ pub const fn default_op_definition() -> &'static str {
 end"#
 }
 
-pub const SNIPPETS: [&'static str; 1] = [default_op_definition()];
+pub const fn handle_err_definition() -> &'static str {
+    r#"local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
+    local ok, err = ...
+    if err ~= nil then
+        ok, err = cb(err)
+    end
+    return (ok), (err)
+end"#
+}
+
+pub const SNIPPETS: [&'static str; 2] = [default_op_definition(), handle_err_definition()];
