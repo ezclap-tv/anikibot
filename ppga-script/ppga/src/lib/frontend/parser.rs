@@ -595,7 +595,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> ExprRes<'a> {
         let expr = if self.match_any(&[TokenKind::Minus, TokenKind::Not, TokenKind::Ellipsis]) {
             let operator = self.previous().lexeme;
-            let value = self.primary()?;
+            let value = self.unary()?;
             expr!(self, ExprKind::Unary(operator, Ptr::new(value)))
         } else {
             self.call()?
