@@ -10,15 +10,16 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     end
     return (ok), (err)
 end
+local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
+    util:error(err)
+    return nil, "WAYTOODANK something broke"
+end
 -- END PPGA STD SYMBOLS
 
 
 local se = nil
 do
-    local _ok_L0S29, _err_L0S29 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, api:streamelements())
+    local _ok_L0S29, _err_L0S29 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
     if _err_L0S29 ~= nil then
         return (_err_L0S29)
     end
@@ -26,10 +27,7 @@ do
 end
 local ok = nil
 do
-    local _ok_L1S92, _err_L1S92 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, api:streamelements():song_requests():current_song())
+    local _ok_L1S92, _err_L1S92 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements():song_requests():current_song())
     if _err_L1S92 ~= nil then
         return (_err_L1S92)
     end

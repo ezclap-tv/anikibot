@@ -3,7 +3,7 @@ use logos::Lexer as RawLexer;
 
 use super::{super::errors::*, ast::*, lexer::*};
 use crate::{
-    codegen::snippets::{DEFAULT_OP_NAME, ERR_HANDLER_NAME},
+    codegen::snippets::{DEFAULT_OP_NAME, ERR_CALLBACK_NAME, ERR_HANDLER_NAME},
     PPGAConfig,
 };
 
@@ -190,16 +190,9 @@ impl<'a> Parser<'a> {
 
         let stmt = if let Some(query) = perform_error_expansion {
             if !Parser::has_err_block(&*initializer.as_ref().unwrap()) {
-                let err = owned_var!("err");
-                let body = make_block!(
-                    false,
-                    make_expr_stmt!(alloc => Expr::new(ExprKind::Call(
-                            Ptr::new(make_get!(alloc => make_var!("util"), colon => "error")),
-                            vec![make_literal!(str => "WAYTOODANK something broke")]
-                    ))),
-                    make_return!(err)
-                );
-                initializer = Some(Ptr::new(Self::make_err_block(body, *initializer.unwrap())));
+                initializer = Some(Ptr::new(
+                    make_call!(alloc => owned_var!(ERR_HANDLER_NAME), owned_var!(ERR_CALLBACK_NAME), *initializer.unwrap()),
+                ));
             }
             // Generate a let statement that initializes the variable to nil
             let target_var = names.first().unwrap().lexeme;

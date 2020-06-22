@@ -1,0 +1,21 @@
+global util = {"get_args"=fn(){},"error"=fn(_,e){print(e);}};
+
+fn api_request() {
+    return nil, "err";
+}
+
+fn recovery_request() {
+    return "recovery", nil;
+}
+
+fn main() {
+    let ok2 = api_request() err {
+        return ...recovery_request();
+    }?;
+    print(f"ok2: {ok2}");
+    
+    let ok1 = api_request()?;
+    return ok1;
+}
+
+print(f"main: {main()}");

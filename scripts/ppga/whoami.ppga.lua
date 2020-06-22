@@ -10,16 +10,17 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     end
     return (ok), (err)
 end
+local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
+    util:error(err)
+    return nil, "WAYTOODANK something broke"
+end
 -- END PPGA STD SYMBOLS
 
 
 local args = util:get_args(...)
 local se = nil
 do
-    local _ok_L1S58, _err_L1S58 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, api:streamelements())
+    local _ok_L1S58, _err_L1S58 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
     if _err_L1S58 ~= nil then
         return (_err_L1S58)
     end
@@ -28,10 +29,7 @@ end
 
 local channel_id = nil
 do
-    local _ok_L3S114, _err_L3S114 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, se:channels():channel_id(args.user))
+    local _ok_L3S114, _err_L3S114 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, se:channels():channel_id(args.user))
     if _err_L3S114 ~= nil then
         return (_err_L3S114)
     end

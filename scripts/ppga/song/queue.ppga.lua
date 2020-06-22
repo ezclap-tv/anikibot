@@ -10,15 +10,16 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     end
     return (ok), (err)
 end
+local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
+    util:error(err)
+    return nil, "WAYTOODANK something broke"
+end
 -- END PPGA STD SYMBOLS
 
 
 local yt = nil
 do
-    local _ok_L0S31, _err_L0S31 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, api:youtube_playlist())
+    local _ok_L0S31, _err_L0S31 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:youtube_playlist())
     if _err_L0S31 ~= nil then
         return (_err_L0S31)
     end
@@ -26,10 +27,7 @@ do
 end
 local se = nil
 do
-    local _ok_L1S63, _err_L1S63 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, api:streamelements())
+    local _ok_L1S63, _err_L1S63 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
     if _err_L1S63 ~= nil then
         return (_err_L1S63)
     end
@@ -48,10 +46,7 @@ util:info("Queueing " .. tostring(num_songs) .. " from " .. tostring(playlist))
 
 local _ = nil
 do
-    local _ok_L13S355, _err_L13S355 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, yt:configure(playlist, num_songs))
+    local _ok_L13S355, _err_L13S355 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, yt:configure(playlist, num_songs))
     if _err_L13S355 ~= nil then
         return (_err_L13S355)
     end
@@ -59,10 +54,7 @@ do
 end
 local song_urls = nil
 do
-    local _ok_L14S398, _err_L14S398 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, yt:get_playlist_videos())
+    local _ok_L14S398, _err_L14S398 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, yt:get_playlist_videos())
     if _err_L14S398 ~= nil then
         return (_err_L14S398)
     end
@@ -70,10 +62,7 @@ do
 end
 local _ = nil
 do
-    local _ok_L15S433, _err_L15S433 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
-            util:error("WAYTOODANK something broke")
-            return (err)
-        end, sr:queue_many(song_urls))
+    local _ok_L15S433, _err_L15S433 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, sr:queue_many(song_urls))
     if _err_L15S433 ~= nil then
         return (_err_L15S433)
     end
