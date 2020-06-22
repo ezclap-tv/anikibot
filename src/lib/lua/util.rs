@@ -53,6 +53,16 @@ impl UserData for Util {
                     .join(" ")
             );
             Ok(())
+        });
+        methods.add_method("dbg", |_, _, va: Variadic<mlua::Value<'lua>>| {
+            log::debug!(
+                "[ LUA ] {}",
+                va.iter()
+                    .map(|v| lua_value_to_string(&v, true))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+            Ok(va)
         })
     }
 }

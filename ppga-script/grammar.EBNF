@@ -37,7 +37,12 @@ unary           ::= ( "not" | "-" | "..." ) unary
                   | "len" "(" expression ")"
                   | call
                   ;
-call            ::=  primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )* ;
+call            ::=  primary 
+                     ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )* 
+                     ( err_block )* 
+                  ;
+
+err_block  ::= "err" block ;
 
 primary        ::= "nil"
                 | "true" 

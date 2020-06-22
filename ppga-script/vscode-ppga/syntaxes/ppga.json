@@ -57,6 +57,9 @@
 					"include": "#anonymous-function"
 				},
 				{
+					"include": "#language-variable"
+				},
+				{
 					"include": "#support-function-call"
 				},
 				{
@@ -78,9 +81,6 @@
 					"include": "#table-property"
 				},
 				{
-					"include": "#language-variable"
-				},
-				{
 					"include": "#support-variable"
 				},
 				{
@@ -93,31 +93,25 @@
 					"include": "#constant"
 				},
 				{
-					"include": "#variable"
-				},
-				{
-					"include": "#function-call"
-				},
-				{
-					"include": "#anonymous-function"
+					"include": "#number"
 				},
 				{
 					"include": "#keyword"
 				},
 				{
-					"include": "#logic-operator"
-				},
-				{
 					"include": "#operator"
 				},
 				{
-					"include": "#number"
+					"include": "#logic-operator"
 				},
 				{
-					"include": "#table-property"
+					"include": "#table-function"
 				},
 				{
-					"include": "#language-variable"
+					"include": "#function"
+				},
+				{
+					"include": "#anonymous-function"
 				},
 				{
 					"include": "#support-function-call"
@@ -130,6 +124,18 @@
 				},
 				{
 					"include": "#string-function-call"
+				},
+				{
+					"include": "#table-property"
+				},
+				{
+					"include": "#language-variable"
+				},
+				{
+					"include": "#support-variable"
+				},
+				{
+					"include": "#variable"
 				}
 			]
 		},
@@ -305,7 +311,7 @@
 		},
 		"operator": {
 			"name": "keyword.operator.ppga",
-			"match": "(\\+|@|-|%|\\*|\\/|\\\\|\\*\\*|=>|==?|!=|<=?|>=?|(?<!\\.)\\.{2,3}(?!\\.))"
+			"match": "(\\+|@|-|%|\\?|\\*|\\/|\\\\|\\*\\*|=>|==?|!=|<=?|>=?|(?<!\\.)\\.{2,3}(?!\\.))"
 		},
 		"keyword": {
 			"name": "keyword.control.ppga",
@@ -537,7 +543,7 @@
 		},
 		"language-variable": {
 			"name": "variable.language.ppga",
-			"match": "\\bself\\b"
+			"match": "\\b(self|ok|err)\\b"
 		},
 		"support-variable": {
 			"name": "support.variable.ppga",

@@ -2,7 +2,10 @@
 use logos::Lexer as RawLexer;
 
 use super::{super::errors::*, ast::*, lexer::*};
-use crate::{codegen::snippets::DEFAULT_OP_NAME, PPGAConfig};
+use crate::{
+    codegen::snippets::{DEFAULT_OP_NAME, ERR_CALLBACK_NAME, ERR_HANDLER_NAME},
+    PPGAConfig,
+};
 
 /// The lexer type expected by the parser.
 pub type Lexer<'a> = RawLexer<'a, TokenKind<'a>>;
@@ -150,7 +153,7 @@ impl<'a> Parser<'a> {
             names.push(self.consume_identifier("Expected a variable name after the comma.")?);
         }
 
-        let initializer = if self.r#match(TokenKind::Equal) {
+        let mut initializer = if self.r#match(TokenKind::Equal) {
             Some(Ptr::new(self.expression()?))
         } else {
             if kind == VarKind::Global {
@@ -186,6 +189,11 @@ impl<'a> Parser<'a> {
         }
 
         let stmt = if let Some(query) = perform_error_expansion {
+            if !Parser::has_err_block(&*initializer.as_ref().unwrap()) {
+                initializer = Some(Ptr::new(
+                    make_call!(alloc => owned_var!(ERR_HANDLER_NAME), owned_var!(ERR_CALLBACK_NAME), *initializer.unwrap()),
+                ));
+            }
             // Generate a let statement that initializes the variable to nil
             let target_var = names.first().unwrap().lexeme;
             let decl = stmt!(
@@ -196,6 +204,7 @@ impl<'a> Parser<'a> {
                     Some(Ptr::new(make_literal!("nil")))
                 )
             );
+
             let ok_name = format!("_ok_L{}S{}", query.line, query.span.start);
             let err_name = format!("_err_L{}S{}", query.line, query.span.start);
             let err_var = owned_var!(err_name.clone());
@@ -217,14 +226,7 @@ impl<'a> Parser<'a> {
                     self,
                     StmtKind::If(
                         make_binary!(alloc => err_var.clone(), "!=", make_literal!("nil")),
-                        Ptr::new(make_block!(
-                            false,
-                            make_expr_stmt!(alloc => Expr::new(ExprKind::Call(
-                                    Ptr::new(make_get!(alloc => make_var!("util"), colon => "error")),
-                                    vec![err_var.clone()]
-                            ))),
-                            make_return!(err_var)
-                        )),
+                        Ptr::new(make_block!(false, make_return!(err_var))),
                         None
                     )
                 ),
@@ -251,6 +253,27 @@ impl<'a> Parser<'a> {
             )
         };
         Ok(stmt)
+    }
+
+    fn has_err_block(expr: &Expr<'a>) -> bool {
+        let mut node = Some(expr);
+
+        while let Some(expr) = node {
+            match &expr.kind {
+                ExprKind::Call(callee, _) => match &callee.kind {
+                    ExprKind::GeneratedVariable(v) if v == ERR_HANDLER_NAME => {
+                        return true;
+                    }
+                    _ => break,
+                },
+                ExprKind::Grouping(ref expr) => {
+                    node = Some(expr);
+                }
+                _ => break,
+            }
+        }
+
+        false
     }
 
     fn block(&mut self, is_standalone: bool) -> StmtRes<'a> {
@@ -631,10 +654,35 @@ impl<'a> Parser<'a> {
                     let is_static = kind == &TokenKind::Colon;
                     self.finish_attr(expr, is_static)?
                 }
+            };
+
+            while self.check(&TokenKind::Identifier) {
+                if self.peek().lexeme != "err" {
+                    break;
+                }
+                let _err = self.advance();
+                self.consume(
+                    TokenKind::LeftBrace,
+                    "Expected a `{` after the `err` in an err block.",
+                )?;
+                let body = self.block(false)?;
+                expr = Parser::make_err_block(body, expr);
             }
         }
 
         Ok(expr)
+    }
+
+    fn make_err_block(callback_body: Stmt<'a>, arg: Expr<'a>) -> Expr<'a> {
+        let callback = expr!(
+            self,
+            ExprKind::Lambda(Ptr::new(Function {
+                name: None,
+                params: vec![owned_var!("err")],
+                body: callback_body,
+            }))
+        );
+        make_call!(alloc => owned_var!(ERR_HANDLER_NAME), callback, arg)
     }
 
     fn primary(&mut self) -> ExprRes<'a> {
@@ -705,8 +753,8 @@ impl<'a> Parser<'a> {
             }
             TokenKind::EOF => {
                 return Err(ParseError::new(
-                    self.line,
-                    token.span,
+                    self.eof.line,
+                    self.eof.span.clone(),
                     format!(
                         "Reached the end of the script, last seen token was {:?}",
                         self.previous().kind
@@ -739,7 +787,10 @@ impl<'a> Parser<'a> {
                         exprs.push(expr!(self, ExprKind::Literal(s.lexeme, true)));
                     }
                     Frag::Sublexer(lex) => {
-                        let expr = Parser::new(lex).expression()?;
+                        let expr = Parser::new(lex).expression().map_err(|mut e| {
+                            e.span.line = self.previous().line;
+                            e
+                        })?;
                         exprs.push(expr);
                     }
                 }

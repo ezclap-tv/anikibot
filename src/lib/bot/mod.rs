@@ -2,14 +2,16 @@ pub mod command;
 pub mod config;
 pub mod util;
 
+use std::collections::HashMap;
+
+use mlua::{ToLua, UserData, UserDataMethods};
+use tokio::stream::StreamExt as _;
+use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
+
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
 };
 use command::{load_commands, Command};
-use mlua::{UserData, UserDataMethods};
-use std::collections::HashMap;
-use tokio::stream::StreamExt as _;
-use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
 /* Previously had commands: ping, ping uptime, whoami, song, song queue */
 
@@ -270,11 +272,23 @@ pub struct APIStorage {
 
 impl UserData for APIStorage {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
-        methods.add_method("streamelements", |_, instance, ()| {
-            Ok(instance.streamelements.clone())
+        methods.add_method("streamelements", |lua, instance, ()| {
+            Ok(match instance.streamelements.clone() {
+                Some(api) => (api.to_lua(lua)?, mlua::Value::Nil),
+                None => (
+                    mlua::Value::Nil,
+                    mlua::Value::String(lua.create_string("StreamElements API is unavailable!")?),
+                ),
+            })
         });
-        methods.add_method("youtube_playlist", |_, instance, ()| {
-            Ok(instance.youtube_playlist.clone())
+        methods.add_method("youtube_playlist", |lua, instance, ()| {
+            Ok(match instance.youtube_playlist.clone() {
+                Some(api) => (api.to_lua(lua)?, mlua::Value::Nil),
+                None => (
+                    mlua::Value::Nil,
+                    mlua::Value::String(lua.create_string("YouTube API is unavailable!")?),
+                ),
+            })
         });
     }
 }

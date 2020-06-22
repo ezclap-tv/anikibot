@@ -433,13 +433,15 @@ mod tests {
 
     #[test]
     fn test_codegen() {
-        let source = r#"
-fn some_api_request() {
+        let source = r#"fn some_api_request() {
     return "ok", nil;
 }
 
 let ok = some_api_request()?;
 print(f"ok: {ok}");
+
+let ok2 = some_api_request() err { return "handled", nil; }?;
+print(f"ok2: {ok2}");
 
 let val = nil;
 let res = val ?? 42;
@@ -448,6 +450,13 @@ print(f"res: {res}");"#;
 local function __PPGA_INTERNAL_DEFAULT(x, default) 
     if x ~= nil then return (x) end
     return (default)
+end
+local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
+    local ok, err = ...
+    if err ~= nil then
+        ok, err = cb(err)
+    end
+    return (ok), (err)
 end
 -- END PPGA STD SYMBOLS
 
@@ -458,14 +467,28 @@ end
 
 local ok = nil
 do
-    local _ok_L5S77, _err_L5S77 = some_api_request()
-    if _err_L5S77 ~= nil then
-        util:error(_err_L5S77)
-        return (_err_L5S77)
+    local _ok_L4S76, _err_L4S76 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
+            util:error("WAYTOODANK something broke")
+            return (err)
+        end, some_api_request())
+    if _err_L4S76 ~= nil then
+        return (_err_L4S76)
     end
-    ok = _ok_L5S77
+    ok = _ok_L4S76
 end
 print("ok: " .. tostring(ok))
+
+local ok2 = nil
+do
+    local _ok_L7S159, _err_L7S159 = __PPGA_INTERNAL_HANDLE_ERR(function (err)
+            return ("handled"), (nil)
+        end, some_api_request())
+    if _err_L7S159 ~= nil then
+        return (_err_L7S159)
+    end
+    ok2 = _ok_L7S159
+end
+print("ok2: " .. tostring(ok2))
 
 local val = nil
 local res = __PPGA_INTERNAL_DEFAULT(val, 42)
