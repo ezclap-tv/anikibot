@@ -264,7 +264,7 @@ pub enum TokenKind<'a> {
     #[regex("\n[\n]+", |lex| lex.slice().len())]
     EOLSeq(usize),
     /// A sequence of one or more whitespace characters. Skipped by the lexer.
-    #[regex(r"[ \t\f]+", logos::skip)]
+    #[regex(r"[ \r\t\f]+", logos::skip)]
     Whitespace,
     /// Used to indicate an error.
     #[error]
