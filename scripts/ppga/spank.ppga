@@ -1,0 +1,5 @@
+let args = util:get_args(@);
+if args.length == 0 {
+    return f"gachiHYPER Slapp {args.user}";
+}
+return f"gachiHYPER Slapp {args[0]}";

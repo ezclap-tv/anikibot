@@ -27,10 +27,10 @@ do
 end
 local ok = nil
 do
-    local _ok_L1S92, _err_L1S92 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements():song_requests():current_song())
-    if _err_L1S92 ~= nil then
-        return (_err_L1S92)
+    local _ok_L1S93, _err_L1S93 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements():song_requests():current_song())
+    if _err_L1S93 ~= nil then
+        return (_err_L1S93)
     end
-    ok = _ok_L1S92
+    ok = _ok_L1S93
 end
 return ("CheemJam now playing " .. tostring(ok.title) .. " [ https://youtu.be/" .. tostring(ok.videoId) .. " ]")
