@@ -1,3 +1,4 @@
+use super::stats::StatsSettings;
 use crate::BackendError;
 use tokio::sync::{mpsc, oneshot};
 
@@ -25,6 +26,14 @@ pub enum APIRequestKind {
     },
     Channel_Id {
         name: String,
+    },
+    // Stats API
+    Stats_MyStats {
+        settings: StatsSettings,
+    },
+    Stats_ChannelStats {
+        channel_id: String,
+        settings: StatsSettings,
     },
     // SongRequest API
     SongReq_Settings,
@@ -93,6 +102,14 @@ pub(crate) fn spawn_api_thread(
                     }
                     APIRequestKind::Channel_Id { name } => {
                         resp_str!(api.channels().channel_id(&name).await)
+                    }
+                    // Stats API
+                    APIRequestKind::Stats_MyStats { settings } => {
+                        // NOTE: This macro performs an extra to-json conversion to simplify LUA interop.
+                        resp_json_from_struct!(api.stats().set_settings(settings).my_stats().await)
+                    },
+                    APIRequestKind::Stats_ChannelStats { channel_id, settings } => {
+                        resp_json_from_struct!(api.stats().set_settings(settings).stats_for_channel(&channel_id).await)
                     }
                     // SongRequest API
                     APIRequestKind::SongReq_Settings => {

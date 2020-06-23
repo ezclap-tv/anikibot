@@ -1,3 +1,4 @@
+extern crate better_panic;
 extern crate chrono;
 extern crate config;
 extern crate log;
@@ -6,18 +7,15 @@ extern crate serde;
 extern crate serde_json;
 extern crate tokio;
 extern crate twitchchat;
-extern crate better_panic;
 
 extern crate backend;
 
-use std::convert::Into;
 use backend::{
     lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
-    StreamElementsConfig
+    StreamElementsConfig,
 };
-use twitchchat::{
-    Dispatcher, RateLimit, Runner, Status
-};
+use std::convert::Into;
+use twitchchat::{Dispatcher, RateLimit, Runner, Status};
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +26,10 @@ async fn main() {
     let lua = mlua::Lua::new();
 
     let dispatcher = Dispatcher::new();
-    let (runner, control) = Runner::new(dispatcher.clone(), RateLimit::full(1, std::time::Duration::from_secs(1)));
+    let (runner, control) = Runner::new(
+        dispatcher.clone(),
+        RateLimit::full(1, std::time::Duration::from_secs(1)),
+    );
 
     let secrets = Secrets::get();
 
@@ -39,18 +40,19 @@ async fn main() {
     let bot = {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
-            let (api, handle) =
-                StreamElementsAPI::with_config(StreamElementsConfig::with_token(key.to_owned()).unwrap())
-                    .start(tokio::runtime::Handle::current())
-                    .await
-                    .expect("Failed to start thread");
+            let (api, handle) = StreamElementsAPI::with_config(
+                StreamElementsConfig::with_token(key.to_owned()).unwrap(),
+            )
+            .start(tokio::runtime::Handle::current())
+            .await
+            .expect("Failed to start thread");
 
             thread_handles.push(handle);
             builder = builder.add_streamelements_api(api);
         }
         if let Some(ref key) = secrets.youtube_api_key {
-            let (api, handle) =
-                YouTubePlaylistAPI::with_api_key(key.to_owned()).start(tokio::runtime::Handle::current());
+            let (api, handle) = YouTubePlaylistAPI::with_api_key(key.to_owned())
+                .start(tokio::runtime::Handle::current());
             thread_handles.push(handle);
             builder = builder.add_youtube_api(api);
         }

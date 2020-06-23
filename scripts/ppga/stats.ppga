@@ -1,0 +1,7 @@
+let se = api:streamelements()?;
+let stats = se:stats();
+let settings = stats:settings();
+let ok = stats:my_stats()?;
+util:info(ok);
+return "FeelsDnakMan printed the stats for " .. 
+      f"{settings.date} [{settings.tz_name}], interval={settings.interval} to the console";

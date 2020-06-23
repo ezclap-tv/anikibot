@@ -27,6 +27,14 @@
     "usage": "Shows your twitch channel ID",
     "script": "scripts/ppga/whoami.ppga.lua"
   },
+  "whois": {
+    "usage": "Shows your twitch channel ID",
+    "script": "scripts/whois.lua"
+  },
+  "stats": {
+    "usage": "Shows the channel stats",
+    "script": "scripts/ppga/stats.ppga.lua"
+  },
   "spank": {
     "usage": "spank [user]. Spank the boy next door",
     "script": "scripts/ppga/spank.ppga.lua"

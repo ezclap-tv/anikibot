@@ -2,6 +2,7 @@
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
 use super::api::{APIResult, StreamElementsAPI};
+use crate::{BackendError, BoxedError};
 use reqwest::Response;
 use serde_json::Value;
 
@@ -25,7 +26,7 @@ impl<'a> Channels<'a> {
 
     /// Retrieves the channel id of the API user.
     #[inline(always)]
-    pub async fn my_id(&self) -> APIResult<String> {
+    pub async fn my_id(&self) -> Result<String, BackendError> {
         self.channel_id("me").await
     }
 
@@ -38,11 +39,19 @@ impl<'a> Channels<'a> {
     }
 
     /// Retrieves the channel id of the user with the given name.
-    pub async fn channel_id(&self, name: &str) -> APIResult<String> {
+    pub async fn channel_id(&self, name: &str) -> Result<String, BackendError> {
         self.channel(name)
-            .await?
+            .await
+            .map_err(|e| BackendError::from(BoxedError::from(e)))?
             .json::<Value>()
             .await
-            .map(|v| v["_id"].as_str().unwrap().to_owned())
+            .map_err(|e| BackendError::from(BoxedError::from(e)))
+            .and_then(|v| {
+                v.get("_id")
+                    .map(|id| id.as_str().unwrap().to_owned())
+                    .ok_or_else(|| {
+                        BackendError::from(format!("Failed to fetch the channel id for `{}`", name))
+                    })
+            })
     }
 }

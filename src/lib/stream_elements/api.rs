@@ -18,8 +18,9 @@
 use super::channels::Channels;
 use super::{
     communication::spawn_api_thread, config::StreamElementsConfig,
-    consumer::ConsumerStreamElementsAPI, song_requests::SongRequests,
+    consumer::ConsumerStreamElementsAPI, song_requests::SongRequests, stats::Stats,
 };
+use crate::BackendError;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Error as ReqwestError, RequestBuilder,
@@ -42,14 +43,14 @@ impl StreamElementsAPIGuard {
     pub async fn start(
         self,
         runtime: runtime::Handle,
-    ) -> APIResult<(ConsumerStreamElementsAPI, std::thread::JoinHandle<()>)> {
+    ) -> Result<(ConsumerStreamElementsAPI, std::thread::JoinHandle<()>), BackendError> {
         let api = self.finalize().await?;
         let (tx, handle) = spawn_api_thread(api, runtime);
         Ok((ConsumerStreamElementsAPI::new(tx), handle))
     }
 
     /// Checks that the channel_id is present in the config. If not, requests it from the StreamElements API via `GET: channels/me/`.
-    async fn finalize(mut self) -> APIResult<StreamElementsAPI> {
+    async fn finalize(mut self) -> Result<StreamElementsAPI, BackendError> {
         if self.api.config.channel_id[..].is_empty() {
             log::warn!("Missing the channel id, attempting to GET");
             self.api.config.channel_id = self.api.channels().my_id().await?;
@@ -184,7 +185,7 @@ impl StreamElementsAPI {
     ///
     /// [`Channels`]: crate::stream_elements::channels::Channels
     #[inline(always)]
-    pub fn channels(&self) -> Channels {
+    pub fn channels(&self) -> Channels<'_> {
         Channels::new(self)
     }
 
@@ -192,7 +193,15 @@ impl StreamElementsAPI {
     ///
     /// [`SongRequests`]: crate::stream_elements::song_requests::SongRequests
     #[inline(always)]
-    pub fn song_requests(&self) -> SongRequests {
+    pub fn song_requests(&self) -> SongRequests<'_> {
         SongRequests::new(self)
+    }
+
+    /// Returns a request builder for the stats API subset.
+    ///
+    /// [`StatsSettings`]: crate::stream_elements::stats::StatsSettings
+    #[inline(always)]
+    pub fn stats(&self) -> Stats<'_> {
+        Stats::new(self)
     }
 }
