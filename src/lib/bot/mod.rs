@@ -148,9 +148,6 @@ impl<'lua> Bot<'lua> {
             return;
         }
 
-        // Not the most clean and fragrant piece code
-        // but demonstrates the usage of tokio::spawn.
-
         if evt.data.starts_with("xD help ") {
             let name = util::strip_prefix(&evt.data, "xD help ");
             log::info!("Help for command {}", name);

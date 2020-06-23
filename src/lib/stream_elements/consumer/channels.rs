@@ -2,11 +2,10 @@
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
 
-use crate::lua::JsonValue;
-use crate::stream_elements::communication::{
-    APIRequestKind, APIResponse, APIResponseMessage, RequestSender,
-};
-use mlua::{Lua, ToLua, UserData, UserDataMethods};
+use super::handle_api_response;
+
+use crate::stream_elements::communication::{APIRequestKind, APIResponse, RequestSender};
+use mlua::{UserData, UserDataMethods};
 
 /// Implements the `channels` API methods.
 #[derive(Clone)]
@@ -38,24 +37,6 @@ impl Channels {
     /// Retrieves the channel id of the user with the given name.
     pub async fn channel_id<S: Into<String>>(&self, name: S) -> APIResponse {
         api_send!(self, APIRequestKind::Channel_Id { name: name.into() })
-    }
-}
-
-fn handle_api_response(
-    lua: &Lua,
-    response: APIResponse,
-) -> Result<(mlua::Value, mlua::Value), mlua::Error> {
-    match response {
-        Ok(response) => match response {
-            APIResponseMessage::Json(json) => Ok((JsonValue(json).to_lua(lua)?, mlua::Nil)),
-            APIResponseMessage::Str(str) => {
-                Ok((mlua::Value::String(lua.create_string(&str)?), mlua::Nil))
-            }
-        },
-        Err(err) => Ok((
-            mlua::Nil,
-            mlua::Value::String(lua.create_string(&format!("{}", err))?),
-        )),
     }
 }
 

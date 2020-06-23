@@ -25,12 +25,15 @@ do
     end
     se = _ok_L0S29
 end
+local stats = se:stats()
+local settings = stats:settings()
 local ok = nil
 do
-    local _ok_L1S92, _err_L1S92 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements():song_requests():current_song())
-    if _err_L1S92 ~= nil then
-        return (_err_L1S92)
+    local _ok_L3S114, _err_L3S114 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, stats:my_stats())
+    if _err_L3S114 ~= nil then
+        return (_err_L3S114)
     end
-    ok = _ok_L1S92
+    ok = _ok_L3S114
 end
-return ("CheemJam now playing " .. tostring(ok.title) .. " [ https://youtu.be/" .. tostring(ok.videoId) .. " ]")
+util:info(ok)
+return ("FeelsDnakMan printed the stats for " .. tostring(settings.date) .. " [" .. tostring(settings.tz_name) .. "], interval=" .. tostring(settings.interval) .. " to the console")

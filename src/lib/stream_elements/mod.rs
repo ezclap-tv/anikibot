@@ -6,3 +6,4 @@ pub mod communication;
 pub mod config;
 pub mod consumer;
 pub mod song_requests;
+pub mod stats;

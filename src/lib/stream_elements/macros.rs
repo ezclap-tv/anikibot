@@ -48,3 +48,25 @@ macro_rules! resp_json {
             })
     };
 }
+
+#[macro_export]
+macro_rules! resp_json_from_struct {
+    ($resp:expr) => {
+        resp_json_from_struct!(json => match $resp {
+            Ok(res) => serde_json::to_value(res)
+                .map_err(|e| crate::BackendError::from(Box::new(e) as crate::BoxedError)),
+            Err(e) => Err(crate::BackendError::from(Box::new(e) as crate::BoxedError)),
+        })
+    };
+    (json => $resp:expr) => {
+        $resp
+            .map(crate::stream_elements::communication::APIResponseMessage::Json)
+            .map_err(|e| {
+                log::error!(
+                    "Caught an error while processing a StreamElements API request: {:#?}",
+                    e
+                );
+                crate::BackendError::from(Box::new(e) as crate::BoxedError)
+            })
+    };
+}
