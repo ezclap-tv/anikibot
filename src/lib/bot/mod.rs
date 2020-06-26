@@ -1,3 +1,5 @@
+#[macro_use]
+pub mod macros;
 pub mod command;
 pub mod config;
 pub mod util;
@@ -10,6 +12,7 @@ use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
 use crate::{
     stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
+    BackendError,
 };
 use command::{load_commands, Command};
 
@@ -164,26 +167,80 @@ impl<'lua> Bot<'lua> {
 
         let message = util::strip_prefix(&evt.data, "xD ");
         if let Some((command, args)) = util::find_command(&self.commands, message) {
-            // TODO: make lua state Arc<RwLock<Lua>>
-            // so that we can send mlua::Function between threads
-            // enabling us to spawn tasks for expensive commands
-            /*
             if command.is_expensive {
-                // spawn task for command
-            } else {
-                // execute the command here
+                let thread_name = format!(
+                    "cmd-{}@{{bot_uptime = {}}}",
+                    command.name,
+                    util::duration_format(chrono::Utc::now() - self.start),
+                );
+                log::info!(
+                    "Command `{}` is expensive, spawning a new thread named `{}`",
+                    command.name,
+                    thread_name,
+                );
+                let path = command.path.clone();
+                let local_lua = mlua::Lua::new();
+                let args = util::format_args(evt, args);
+                let channel = evt.channel.clone().into_owned();
+                let mut control = self.control.clone();
+                crate::lua::init_globals_for_lua(&local_lua, &self);
+
+                std::thread::Builder::new()
+                    .name(thread_name)
+                    .spawn(move || {
+                        let start = chrono::Utc::now();
+                        (|| {
+                            let fun = thread_try!(
+                                util::load_file(&path).and_then(|source| {
+                                    local_lua
+                                        .load(&source)
+                                        .into_function()
+                                        .map_err(|e| BackendError::from(format!("{}", e)))
+                                }),
+                                "Failed to compile the script: {:?}"
+                            );
+
+                            let mut rt = thread_try!(
+                                tokio::runtime::Runtime::new(),
+                                "Failed to create a new tokio runtime: {:?}"
+                            );
+                            rt.block_on(async move {
+                                let response = fun
+                                    .call_async::<mlua::Variadic<String>, Option<String>>(args)
+                                    .await;
+                                let response = match response {
+                                    Ok(Some(resp)) => resp,
+                                    Ok(None) => return,
+                                    Err(e) => {
+                                        thread_error!("Failed to execute script: {:?}", e);
+                                        send_in_thread(
+                                            &mut control,
+                                            &channel,
+                                            "WAYTOODANK devs broke something!",
+                                        )
+                                        .await;
+                                        return;
+                                    }
+                                };
+                                send_in_thread(&mut control, &channel, response).await;
+                            })
+                        })();
+                        thread_info!(
+                            "Terminating the task thread (thread lived for {})",
+                            util::duration_format(chrono::Utc::now() - start)
+                        );
+                    })
+                    .unwrap();
+                return;
             }
-            */
             let response = match command
                 .script
                 .clone()
                 .call_async::<mlua::Variadic<String>, Option<String>>(util::format_args(evt, args))
                 .await
             {
-                Ok(resp) if resp.is_none() => {
-                    return;
-                }
-                Ok(resp) => resp.unwrap(),
+                Ok(Some(resp)) => resp,
+                Ok(None) => return,
                 Err(e) => {
                     log::error!("Failed to execute script: {:?}", e);
                     "WAYTOODANK devs broke something!".to_owned()
@@ -226,9 +283,7 @@ impl<'lua> Bot<'lua> {
     }
 
     async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {
-        self.control
-            .writer()
-            .privmsg(channel, message.into())
+        send(&mut self.control, channel, message)
             .await
             .unwrap_or_else(|e| {
                 log::error!(
@@ -238,6 +293,24 @@ impl<'lua> Bot<'lua> {
                 );
             })
     }
+}
+
+async fn send<S: Into<String>>(
+    control: &mut Control,
+    channel: &str,
+    message: S,
+) -> Result<(), twitchchat::Error> {
+    control.writer().privmsg(channel, message.into()).await
+}
+
+async fn send_in_thread<S: Into<String>>(control: &mut Control, channel: &str, message: S) {
+    send(control, channel, message).await.unwrap_or_else(|e| {
+        thread_error!(
+            "Caught a critical error while sending a response to the channel {}: {:?}",
+            channel,
+            e
+        );
+    })
 }
 
 pub fn init_api_globals(lua: &mlua::Lua, api: APIStorage, bot: BotInfo) {

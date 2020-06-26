@@ -109,9 +109,12 @@ pub fn stmt_to_lua<'a>(stmt: &Stmt<'a>, config: &PPGAConfig, depth: usize) -> St
         StmtKind::For(r#for) => {
             code.push_and_pad("for ", depth)
                 .append(match &r#for.condition {
-                    ForCondition::Range(range) => {
-                        format!("i = {}, {}, {}", range.start, range.end, range.step)
-                    }
+                    ForCondition::Range(range) => format!(
+                        "i = {}, {}, {}",
+                        expr_to_lua(&range.start, &config, depth),
+                        expr_to_lua(&range.end, &config, depth),
+                        expr_to_lua(&range.step, &config, depth)
+                    ),
                     ForCondition::Exprs(exprs) => format!(
                         "{} in {}",
                         r#for

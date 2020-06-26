@@ -1,4 +1,3 @@
-use super::lexer::Number;
 use crate::PPGAConfig;
 
 /// The pointer type used to wrap Expr/Stmt nodes.
@@ -22,10 +21,10 @@ pub struct AST<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Range {
-    pub start: Number,
-    pub end: Number,
-    pub step: Number,
+pub struct Range<'a> {
+    pub start: Expr<'a>,
+    pub end: Expr<'a>,
+    pub step: Expr<'a>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +63,7 @@ pub enum VarKind {
 
 #[derive(Debug, Clone)]
 pub enum ForCondition<'a> {
-    Range(Ptr<Range>),
+    Range(Ptr<Range<'a>>),
     Exprs(Vec<Expr<'a>>),
 }
 #[derive(Debug, Clone)]
