@@ -22,6 +22,20 @@
 
     **Make sure that `BOT_NAME` matches the user for which the `OAUTH_TOKEN` was generated!**
 
+* Download and install the PPGA transpiler
+    ```bash
+    $ cargo install --git https://github.com/OptimalStrategy/ppga/ --features=build-binary
+    ```
+
+* Transpile the commands
+    ```bash
+    # Linux
+    $ ppga.sh --batch-output scripts/ppga
+
+    # Window
+    C:> ppga.bat --batch-output scripts/ppga
+    ```
+
 * Optionally build the documentation
 
     ```bash
@@ -31,7 +45,7 @@
     ```bash
     # Linux
     $ xdg-open target/doc/backend/index.html
-    
+
     # Windows
     C:> open target/doc/backend/index.html
     ```
@@ -47,7 +61,7 @@
     ```
 
 * Run the program
-    
+
     ```bash
     $ cargo run --release
     ```
