@@ -19,7 +19,6 @@ logos = "0.11.4"
 mlua = { version = "0.4", features = ["async", "send", "lua53", "vendored"] }
 lazy_static = "1.4.0"
 better-panic = "0.2.0"
-ppga = { path = "ppga-script/ppga" }
 
 [lib]
 name = "backend"
@@ -28,7 +27,3 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "aniki"
 path = "src/main.rs"
-
-# [[bin]]
-# name = "ppga"
-# path = "src/ppga.rs"

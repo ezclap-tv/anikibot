@@ -1,3 +1,3 @@
 @echo off
 
-cargo run --release --quiet --manifest-path .\ppga-script\ppga\Cargo.toml --features=build-binary -- %*
+%USERPROFILE%\.cargo\bin\ppga --err-msg "WAYTOODANK something broke" --err-logger util:error $*
