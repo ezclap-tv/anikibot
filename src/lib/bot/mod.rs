@@ -72,7 +72,10 @@ impl<'lua> Bot<'lua> {
     }
 
     pub fn get_bot_info(&self) -> BotInfo {
-        BotInfo { start: self.start }
+        BotInfo {
+            start: self.start,
+            control: self.control.clone(),
+        }
     }
 
     pub fn get_api_storage(&self) -> APIStorage {
@@ -323,8 +326,10 @@ pub fn init_api_globals(lua: &mlua::Lua, api: APIStorage, bot: BotInfo) {
     }
 }
 
+#[derive(Clone)]
 pub struct BotInfo {
     pub start: chrono::DateTime<chrono::Utc>,
+    control: Control,
 }
 
 impl UserData for BotInfo {
@@ -332,6 +337,19 @@ impl UserData for BotInfo {
         methods.add_method("uptime", |_, instance, ()| {
             Ok(util::duration_format(chrono::Utc::now() - instance.start))
         });
+        methods.add_async_method(
+            "send",
+            |lua, mut instance, (chan, msg): (String, String)| async move {
+                let res = instance.control.writer().privmsg(&chan, msg).await;
+                Ok(match res {
+                    Ok(()) => (mlua::Value::Boolean(true), mlua::Value::Nil),
+                    Err(e) => (
+                        mlua::Value::Nil,
+                        mlua::Value::String(lua.create_string(&e.to_string())?),
+                    ),
+                })
+            },
+        );
     }
 }
 

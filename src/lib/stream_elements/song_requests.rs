@@ -28,7 +28,6 @@ impl<'a> SongRequests<'a> {
             .await
     }
 
-    // TODO: proper output type
     /// Retrieves the currently playing song.
     #[inline(always)]
     pub async fn current_song(&self) -> APIResult<Response> {
