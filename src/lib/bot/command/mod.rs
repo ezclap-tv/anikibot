@@ -10,7 +10,7 @@ pub(crate) fn load_lua<'a>(
 ) -> Result<mlua::Function<'a>, BackendError> {
     lua.load(source).into_function().map_err(|e| {
         BackendError::from(format!(
-            "Failed to load the LUA script at for `{}`: {}",
+            "Failed to load the LUA script for `{}`: {}",
             name, e
         ))
     })
@@ -25,6 +25,7 @@ fn transform<'a>(
         let data: Option<CommandData> = match (command.usage, command.script) {
             (Some(usage), Some(script)) => Some(CommandData {
                 usage,
+                name: name.clone(),
                 is_expensive: command.is_expensive.unwrap_or(false),
                 path: script.clone(),
                 script: load_lua(
@@ -77,6 +78,7 @@ pub struct CommandData<'a> {
     pub usage: String,
     pub is_expensive: bool,
     pub path: String,
+    pub name: String,
     pub script: mlua::Function<'a>,
 }
 

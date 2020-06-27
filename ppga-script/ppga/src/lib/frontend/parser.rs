@@ -400,10 +400,24 @@ impl<'a> Parser<'a> {
                     _ => return Err(ParseError::new(line, span, "Invalid assignment target")),
                 }
             }
-            return Ok(stmt!(
-                self,
-                StmtKind::Assignment(exprs, operator, Ptr::new(self.expression()?))
-            ));
+            let rhs = if operator == "=" {
+                Ptr::new(self.expression()?)
+            } else {
+                if exprs.len() != 1 {
+                    return Err(ParseError::new(
+                        line,
+                        span,
+                        "Cannot use shorthand operators with multiple variables on the left side",
+                    ));
+                }
+                make_binary!(
+                    alloc => exprs[0].clone(),
+                    operator.strip_suffix("=").unwrap(),
+                    self.expression()?
+                )
+            };
+
+            return Ok(stmt!(self, StmtKind::Assignment(exprs, "=", rhs)));
         }
 
         if exprs.len() > 1 {
@@ -418,26 +432,17 @@ impl<'a> Parser<'a> {
         Ok(stmt!(self, StmtKind::ExprStmt(Ptr::new(expr))))
     }
 
-    fn range(&mut self) -> Result<Ptr<Range>, ParseError> {
+    fn range(&mut self) -> Result<Ptr<Range<'a>>, ParseError> {
         self.consume(TokenKind::LeftParen, "Expected a `(` after `range`")?;
-        let mut step = 1 as Number;
-        let mut start = 0 as Number;
-        let mut end = Self::as_number(
-            self.consume(TokenKind::Number, "Expected a range stop value")?
-                .lexeme,
-        );
+        let mut step = make_literal!("1");
+        let mut start = make_literal!("0");
+        let mut end = self.expression()?;
         if self.r#match(TokenKind::Comma) {
             start = end;
-            end = Self::as_number(
-                self.consume(TokenKind::Number, "Expected a range stop value")?
-                    .lexeme,
-            );
+            end = self.expression()?;
         };
         if self.r#match(TokenKind::Comma) {
-            step = Self::as_number(
-                self.consume(TokenKind::Number, "Expected a range step value")?
-                    .lexeme,
-            );
+            step = self.expression()?;
         }
         self.consume(TokenKind::RightParen, "Expected a `)` after the arguments")?;
         Ok(Ptr::new(Range { start, end, step }))
@@ -1081,14 +1086,6 @@ impl<'a> Parser<'a> {
             .map(|kind| Token::new(self.lexer.slice(), self.line, self.lexer.span(), kind))
             .unwrap_or_else(|| self.eof.clone());
         &self.previous
-    }
-
-    #[inline(always)]
-    fn as_number(lexeme: &str) -> Number {
-        match lexeme.parse() {
-            Ok(value) => value,
-            _ => unreachable!(),
-        }
     }
 
     #[inline]

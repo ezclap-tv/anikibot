@@ -38,5 +38,10 @@
   "spank": {
     "usage": "spank [user]. Spank the boy next door",
     "script": "scripts/ppga/spank.ppga.lua"
+  },
+  "channel": {
+    "usage": "Start channeling the ♂energy♂. Provide a `force` argument to bypass the song check.",
+    "script": "scripts/ppga/channel.ppga.lua",
+    "is_expensive": true
   }
 }

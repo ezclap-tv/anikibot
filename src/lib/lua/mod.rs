@@ -45,6 +45,10 @@ pub fn init_globals<'a>(lua: &'a mlua::Lua, bot: &'a Bot<'a>) {
         INITIALIZED.store(true, Ordering::Release);
     }
 
+    init_globals_for_lua(lua, bot);
+}
+
+pub(crate) fn init_globals_for_lua<'a>(lua: &'a mlua::Lua, bot: &'a Bot<'a>) {
     init_util_globals(lua);
     init_api_globals(lua, bot.get_api_storage(), bot.get_bot_info());
 }
