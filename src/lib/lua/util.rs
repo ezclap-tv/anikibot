@@ -1,4 +1,5 @@
 use mlua::{Lua, UserData, UserDataMethods, Variadic};
+use std::time::Duration;
 
 /// Initializes utility globals
 pub fn init_util_globals(lua: &Lua) {
@@ -7,6 +8,7 @@ pub fn init_util_globals(lua: &Lua) {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Util {}
 impl UserData for Util {
     fn add_methods<'lua, M: UserDataMethods<'lua, Self>>(methods: &mut M) {
@@ -63,7 +65,12 @@ impl UserData for Util {
                     .join(" ")
             );
             Ok(va)
-        })
+        });
+        methods.add_async_method("wait", |_, _, time: u16| async move {
+            log::debug!("[ LUA ] Waiting for {}ms", time);
+            tokio::time::delay_for(Duration::from_millis(time as u64)).await;
+            Ok(())
+        });
     }
 }
 
