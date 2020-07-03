@@ -4,7 +4,7 @@ use super::{
     data::{PlaylistPage, Videos, YouTubeVideo},
 };
 use crate::{BackendError, BoxedError, YouTubeAPIConfig};
-use reqwest::{Client, Error as ReqwestError};
+use reqwest::Client;
 use serde_json::Value;
 use tokio::runtime;
 
@@ -117,12 +117,27 @@ impl YouTubePlaylistAPI {
             self.next_page = p.next_page_token.clone().unwrap_or_else(String::new);
             p
         })
-        .map_err(|e| BackendError::from(Box::new(e) as BoxedError))
     }
 
     // TODO: make this panic-safe
-    async fn get_page(&mut self, url: String) -> Result<PlaylistPage, ReqwestError> {
-        let result = self.client.get(&url).send().await?.json::<Value>().await?;
+    async fn get_page(&mut self, url: String) -> Result<PlaylistPage, BackendError> {
+        let result = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| BackendError::from(Box::new(e) as BoxedError))?
+            .json::<Value>()
+            .await
+            .map_err(|e| BackendError::from(Box::new(e) as BoxedError))?;
+
+        if let Some(error) = result.get("error") {
+            log::error!("Failed to get the playlist: `{}`\n{:#?}", url, error);
+            return Err(BackendError::from(format!(
+                "YouTubePlaylistAPI Error: {}",
+                error["message"]
+            )));
+        }
 
         self.number_of_videos = result["pageInfo"]["totalResults"]
             .as_u64()
