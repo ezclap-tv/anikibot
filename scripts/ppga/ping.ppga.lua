@@ -11,8 +11,7 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     return (ok), (err)
 end
 local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
-    util:error(err)
-    return nil, "WAYTOODANK something broke"
+    error(err)
 end
 -- END PPGA STD SYMBOLS
 

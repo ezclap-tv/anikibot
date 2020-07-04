@@ -11,8 +11,7 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     return (ok), (err)
 end
 local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
-    util:error(err)
-    return nil, "WAYTOODANK something broke"
+    error(err)
 end
 -- END PPGA STD SYMBOLS
 
@@ -30,24 +29,25 @@ local DELAY_02 = 20000
 local start = false
 local args = util:get_args(...)
 
-if args.length > 1 and args[0] == "force" then
+if args.length > 0 and args[0] == "force" then
     start = true
+    return ("STARTED")
 else
     local se = nil
     do
-        local _ok_L23S942, _err_L23S942 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
-        if _err_L23S942 ~= nil then
-            return (_err_L23S942)
+        local _ok_L24S964, _err_L24S964 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
+        if _err_L24S964 ~= nil then
+            return (nil), (_err_L24S964)
         end
-        se = _ok_L23S942
+        se = _ok_L24S964
     end
     local ok = nil
     do
-        local _ok_L24S991, _err_L24S991 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, se:song_requests():current_song())
-        if _err_L24S991 ~= nil then
-            return (_err_L24S991)
+        local _ok_L25S1013, _err_L25S1013 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, se:song_requests():current_song())
+        if _err_L25S1013 ~= nil then
+            return (nil), (_err_L25S1013)
         end
-        ok = _ok_L24S991
+        ok = _ok_L25S1013
     end
     util:info("Current song is " .. tostring(ok.title) .. ", id = " .. tostring(ok.videoId) .. "; comparing with: " .. tostring(VIDEO_ID) .. ".")
     start = ok.videoId == VIDEO_ID

@@ -18,7 +18,7 @@ let args = util:get_args(@);
 
 // Check that the current video is [ SUPER ♂ GACHI ♂ SAIYAN ].
 // This check is disabled if the `force` argument is provided.
-if args.length > 1 and args[0] == "force" {
+if args.length > 0 and args[0] == "force" {
     start = true;
 } else {
     let se = api:streamelements()?;

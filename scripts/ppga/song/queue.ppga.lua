@@ -11,8 +11,7 @@ local function __PPGA_INTERNAL_HANDLE_ERR(cb, ...)
     return (ok), (err)
 end
 local function __PPGA_INTERNAL_DFLT_ERR_CB(err)
-    util:error(err)
-    return nil, "WAYTOODANK something broke"
+    error(err)
 end
 -- END PPGA STD SYMBOLS
 
@@ -21,7 +20,7 @@ local yt = nil
 do
     local _ok_L0S31, _err_L0S31 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:youtube_playlist())
     if _err_L0S31 ~= nil then
-        return (_err_L0S31)
+        return (nil), (_err_L0S31)
     end
     yt = _ok_L0S31
 end
@@ -29,7 +28,7 @@ local se = nil
 do
     local _ok_L1S63, _err_L1S63 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
     if _err_L1S63 ~= nil then
-        return (_err_L1S63)
+        return (nil), (_err_L1S63)
     end
     se = _ok_L1S63
 end
@@ -48,7 +47,7 @@ local _ = nil
 do
     local _ok_L13S355, _err_L13S355 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, yt:configure(playlist, num_songs))
     if _err_L13S355 ~= nil then
-        return (_err_L13S355)
+        return (nil), (_err_L13S355)
     end
     _ = _ok_L13S355
 end
@@ -56,7 +55,7 @@ local song_urls = nil
 do
     local _ok_L14S398, _err_L14S398 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, yt:get_playlist_videos())
     if _err_L14S398 ~= nil then
-        return (_err_L14S398)
+        return (nil), (_err_L14S398)
     end
     song_urls = _ok_L14S398
 end
@@ -64,7 +63,7 @@ local _ = nil
 do
     local _ok_L15S433, _err_L15S433 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, sr:queue_many(song_urls))
     if _err_L15S433 ~= nil then
-        return (_err_L15S433)
+        return (nil), (_err_L15S433)
     end
     _ = _ok_L15S433
 end
