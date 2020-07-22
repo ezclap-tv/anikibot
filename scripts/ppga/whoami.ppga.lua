@@ -19,19 +19,18 @@ end
 local args = util:get_args(...)
 local se = nil
 do
-    local _ok_L1S58, _err_L1S58 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
-    if _err_L1S58 ~= nil then
-        return (nil), (_err_L1S58)
+    local _ok_L1S59, _err_L1S59 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, api:streamelements())
+    if _err_L1S59 ~= nil then
+        return (nil), (_err_L1S59)
     end
-    se = _ok_L1S58
+    se = _ok_L1S59
 end
-
 local channel_id = nil
 do
-    local _ok_L3S114, _err_L3S114 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, se:channels():channel_id(args.user))
-    if _err_L3S114 ~= nil then
-        return (nil), (_err_L3S114)
+    local _ok_L3S117, _err_L3S117 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, se:channels():channel_id(args.user))
+    if _err_L3S117 ~= nil then
+        return (nil), (_err_L3S117)
     end
-    channel_id = _ok_L3S114
+    channel_id = _ok_L3S117
 end
 return ("monkaS 👉 your ID is " .. tostring(channel_id))

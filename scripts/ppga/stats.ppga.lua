@@ -28,11 +28,11 @@ local stats = se:stats()
 local settings = stats:settings()
 local ok = nil
 do
-    local _ok_L3S114, _err_L3S114 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, stats:my_stats())
-    if _err_L3S114 ~= nil then
-        return (nil), (_err_L3S114)
+    local _ok_L3S117, _err_L3S117 = __PPGA_INTERNAL_HANDLE_ERR(__PPGA_INTERNAL_DFLT_ERR_CB, stats:my_stats())
+    if _err_L3S117 ~= nil then
+        return (nil), (_err_L3S117)
     end
-    ok = _ok_L3S114
+    ok = _ok_L3S117
 end
 util:info(ok)
 return ("FeelsDnakMan printed the stats for " .. tostring(settings.date) .. " [" .. tostring(settings.tz_name) .. "], interval=" .. tostring(settings.interval) .. " to the console")

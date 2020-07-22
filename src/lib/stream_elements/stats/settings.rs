@@ -31,7 +31,7 @@ impl StatsSettings {
     /// the stats for the past week with the current date (UTC) in the ISO 8601 format.
     pub fn new() -> Self {
         Self {
-            interval: StatsInterval::Week,
+            interval: StatsInterval::Year,
             date: Utc::now().date(),
             timezone: TimeZone::UTC,
         }

@@ -1,47 +1,46 @@
 {
-  "test": {
-    "usage": "Test command",
-    "script": "scripts/ppga/test.ppga.lua",
-    "commands": {
-      "sub": {
-        "usage": "Test subcommand",
-        "script": "scripts/test/sub.lua"
-      }
+    "test": {
+        "usage": "Test command",
+        "script": "scripts/ppga/test.ppga.lua",
+        "commands": {
+            "sub": {
+                "usage": "Test subcommand",
+                "script": "scripts/test/sub.lua"
+            }
+        }
+    },
+    "song": {
+        "usage": "Shows the currently playing song title and link",
+        "script": "scripts/ppga/song.ppga.lua",
+        "commands": {
+            "queue": {
+                "usage": "song queue [playlist link] [song count : optional]. Queues songs to the streamelements media request queue",
+                "script": "scripts/ppga/song/queue.ppga.lua"
+            }
+        }
+    },
+    "ping": {
+        "usage": "Shows the bot uptime",
+        "script": "scripts/ppga/ping.ppga.lua"
+    },
+    "whoami": {
+        "usage": "Shows your twitch channel ID",
+        "script": "scripts/ppga/whoami.ppga.lua"
+    },
+    "whois": {
+        "usage": "Shows your twitch channel ID",
+        "script": "scripts/whois.lua"
+    },
+    "stats": {
+        "usage": "Shows the channel stats",
+        "script": "scripts/ppga/stats.ppga.lua"
+    },
+    "mrgay": {
+        "usage": "mr gay",
+        "script": "scripts/ppga/mrgay.ppga.lua"
+    },
+    "spank": {
+        "usage": "spank [user]. Spank the boy next door",
+        "script": "scripts/ppga/spank.ppga.lua"
     }
-  },
-  "song": {
-    "usage": "Shows the currently playing song title and link",
-    "script": "scripts/ppga/song.ppga.lua",
-    "commands": {
-      "queue": {
-        "usage": "song queue [playlist link] [song count : optional]. Queues songs to the streamelements media request queue",
-        "script": "scripts/ppga/song/queue.ppga.lua"
-      }
-    }
-  },
-  "ping": {
-    "usage": "Shows the bot uptime",
-    "script": "scripts/ppga/ping.ppga.lua"
-  },
-  "whoami": {
-    "usage": "Shows your twitch channel ID",
-    "script": "scripts/ppga/whoami.ppga.lua"
-  },
-  "whois": {
-    "usage": "Shows your twitch channel ID",
-    "script": "scripts/whois.lua"
-  },
-  "stats": {
-    "usage": "Shows the channel stats",
-    "script": "scripts/ppga/stats.ppga.lua"
-  },
-  "spank": {
-    "usage": "spank [user]. Spank the boy next door",
-    "script": "scripts/ppga/spank.ppga.lua"
-  },
-  "channel": {
-    "usage": "Start channeling the ♂energy♂. Provide a `force` argument to bypass the song check.",
-    "script": "scripts/ppga/channel.ppga.lua",
-    "is_expensive": true
-  }
 }
