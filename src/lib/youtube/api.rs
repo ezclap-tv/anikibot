@@ -3,7 +3,7 @@ use super::{
     consumer::ConsumerYouTubePlaylistAPI,
     data::{PlaylistPage, Videos, YouTubeVideo},
 };
-use crate::{BackendError, BoxedError, YouTubeAPIConfig};
+use crate::{BackendError, YouTubeAPIConfig};
 use reqwest::Client;
 use serde_json::Value;
 use tokio::runtime;
@@ -126,10 +126,10 @@ impl YouTubePlaylistAPI {
             .get(&url)
             .send()
             .await
-            .map_err(|e| BackendError::from(Box::new(e) as BoxedError))?
+            .map_err(BackendError::from)?
             .json::<Value>()
             .await
-            .map_err(|e| BackendError::from(Box::new(e) as BoxedError))?;
+            .map_err(BackendError::from)?;
 
         if let Some(error) = result.get("error") {
             log::error!("Failed to get the playlist: `{}`\n{:#?}", url, error);

@@ -40,7 +40,8 @@ impl BotBuilder {
     }
 
     pub fn build<'lua>(self, lua: &'lua mlua::Lua) -> Bot<'lua> {
-        let commands: HashMap<String, Command<'lua>> = load_commands(lua, "commands.json");
+        let commands: HashMap<String, Command<'lua>> =
+            load_commands(lua, "commands.json").expect("Failed to load the commands");
 
         Bot {
             streamelements: self.streamelements_api,
@@ -127,6 +128,27 @@ impl<'lua> Bot<'lua> {
 
         if evt.data.trim() == "xD stop" && self.is_boss(&evt.name) {
             self.stop();
+            return;
+        }
+
+        if evt.data.starts_with("xD reload all") && self.is_boss(&evt.name) {
+            log::info!("Attempting to reload commands.json");
+            match load_commands(lua, "commands.json") {
+                Ok(commands) => {
+                    log::info!("Successfully reloaded commands.json");
+                    self.commands = commands;
+                    self.send(
+                        &evt.channel,
+                        format!("👉 Successfully reloaded the commands file."),
+                    )
+                    .await
+                }
+                Err(e) => {
+                    log::error!("Failed to reload commands.json: {}", e);
+                    self.send(&evt.channel, "WAYTOODANK ❗❗ something broke".to_owned())
+                        .await;
+                }
+            }
             return;
         }
 

@@ -42,5 +42,9 @@
     "spank": {
         "usage": "spank [user]. Spank the boy next door",
         "script": "scripts/ppga/spank.ppga.lua"
+    },
+    "channel": {
+        "usage": "channel. Execute as soon as SUPER ♂ GACHI ♂ SAIYAN starts to play gachiSS",
+        "script": "scripts/ppga/channel.ppga.lua"
     }
 }

@@ -34,16 +34,12 @@ pub fn load_file(path: &str) -> Result<String, BackendError> {
     })
 }
 
-pub fn parse_json<'a, R>(json: &'a str) -> R
+pub fn parse_json<'a, R>(json: &'a str) -> Result<R, BackendError>
 where
     R: Deserialize<'a>,
 {
-    match from_str(&json) {
-        Ok(json) => json,
-        Err(e) => {
-            panic!("Failed to read \"commands.json\": {}", e);
-        }
-    }
+    from_str(&json)
+        .map_err(|e| BackendError::from(format!("Failed to read \"commands.json\": {}", e)))
 }
 
 pub fn duration_format(duration: chrono::Duration) -> String {
