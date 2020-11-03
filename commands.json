@@ -1,7 +1,7 @@
 {
     "test": {
         "usage": "Test command",
-        "script": "scripts/ppga/test.ppga.lua",
+        "script": "scripts/ppga/test.ppga",
         "commands": {
             "sub": {
                 "usage": "Test subcommand",
@@ -11,21 +11,21 @@
     },
     "song": {
         "usage": "Shows the currently playing song title and link",
-        "script": "scripts/ppga/song.ppga.lua",
+        "script": "scripts/ppga/song.ppga",
         "commands": {
             "queue": {
                 "usage": "song queue [playlist link] [song count : optional]. Queues songs to the streamelements media request queue",
-                "script": "scripts/ppga/song/queue.ppga.lua"
+                "script": "scripts/ppga/song/queue.ppga"
             }
         }
     },
     "ping": {
         "usage": "Shows the bot uptime",
-        "script": "scripts/ppga/ping.ppga.lua"
+        "script": "scripts/ppga/ping.ppga"
     },
     "whoami": {
         "usage": "Shows your twitch channel ID",
-        "script": "scripts/ppga/whoami.ppga.lua"
+        "script": "scripts/ppga/whoami.ppga"
     },
     "whois": {
         "usage": "Shows your twitch channel ID",
@@ -33,18 +33,18 @@
     },
     "stats": {
         "usage": "Shows the channel stats",
-        "script": "scripts/ppga/stats.ppga.lua"
+        "script": "scripts/ppga/stats.ppga"
     },
     "mrgay": {
         "usage": "mr gay",
-        "script": "scripts/ppga/mrgay.ppga.lua"
+        "script": "scripts/ppga/mrgay.ppga"
     },
     "spank": {
         "usage": "spank [user]. Spank the boy next door",
-        "script": "scripts/ppga/spank.ppga.lua"
+        "script": "scripts/ppga/spank.ppga"
     },
     "channel": {
         "usage": "channel. Execute as soon as SUPER ♂ GACHI ♂ SAIYAN starts to play gachiSS",
-        "script": "scripts/ppga/channel.ppga.lua"
+        "script": "scripts/ppga/channel.ppga"
     }
 }
