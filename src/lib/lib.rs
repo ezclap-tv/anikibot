@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 extern crate log;
+extern crate ppga;
 extern crate reqwest;
 extern crate serde;
 extern crate serde_json;
@@ -31,6 +32,14 @@ impl From<String> for BackendError {
     fn from(s: String) -> Self {
         Self {
             inner: BoxedError::from(s),
+        }
+    }
+}
+
+impl From<reqwest::Error> for BackendError {
+    fn from(e: reqwest::Error) -> Self {
+        Self {
+            inner: Box::from(e),
         }
     }
 }

@@ -54,15 +54,19 @@ fn transform<'a>(
     transformed
 }
 
-pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> HashMap<String, Command<'a>> {
-    transform(
+pub fn load_commands<'a>(
+    lua: &'a mlua::Lua,
+    path: &str,
+) -> Result<HashMap<String, Command<'a>>, BackendError> {
+    Ok(transform(
         lua,
-        util::parse_json(
-            &util::load_file(path).unwrap_or_else(|e| {
-                panic!("Failed to locate the commands json at {}: {}", path, e)
-            }),
-        ),
-    )
+        util::parse_json(&util::load_file(path).map_err(|e| {
+            BackendError::from(format!(
+                "Failed to locate the commands json at {}: {}",
+                path, e
+            ))
+        })?)?,
+    ))
 }
 
 #[derive(Clone, Deserialize)]
