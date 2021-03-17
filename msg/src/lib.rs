@@ -11,19 +11,66 @@ pub enum ParseError {
     MissingPrefix,
     #[error("Invalid command '{0}'")]
     InvalidCommand(String),
+    #[error("Missing channel id")]
+    MissingChannel,
     #[error("Unknown parse error")]
     Unknown,
 }
 
-// TODO: consider treating the '#channel' param separately from other params, it would simplify some code below.
-
 #[derive(Clone, Debug, PartialEq)]
-pub struct Message<'a> {
+pub struct IrcMessage<'a> {
+    channel: Channel<'a>,
     params: Params<'a>,
     cmd: Command,
     tags: Tags<'a>,
     prefix: Prefix<'a>,
     source: &'a str,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Channel<'a>(&'a str);
+
+impl<'a> Channel<'a> {
+    /// Parses a channel id
+    ///
+    /// Valid form: `#channel`
+    pub fn parse(data: &'a str) -> Result<(Channel<'a>, &'a str), ParseError> {
+        let data = data.trim_start();
+        let start = match data.find('#') {
+            Some(idx) => idx,
+            None => return Err(ParseError::MissingChannel),
+        };
+        let end = match data.find(' ') {
+            Some(idx) => idx,
+            None => data.len(),
+        };
+
+        // this parses
+        // #<channel> ...params
+        // as
+        // <channel>
+        let channel = &data[start + 1..end];
+        println!("------>{}", channel);
+        if channel.is_empty() {
+            return Err(ParseError::MissingChannel);
+        }
+
+        Ok((Channel(channel), &data[end..]))
+    }
+}
+
+impl<'a> Deref for Channel<'a> {
+    type Target = &'a str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> fmt::Display for Channel<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        println!("-->{}", self.0);
+        write!(f, "#{}", self.0)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -102,7 +149,6 @@ impl Command {
             Some(v) => v,
             None => data.len(),
         };
-        println!("{:#?}", data);
         let cmd = &data[..end];
         let cmd = match cmd {
             "PING" => Ping,
@@ -280,27 +326,15 @@ impl<'a> Deref for Params<'a> {
 
 impl<'a> fmt::Display for Params<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: this would be simplified if #channel param was handled separate from other params
-        let mut previous_param_was_channel = false;
+        write!(f, ":")?;
         let mut iter = self.iter().peekable();
         while let Some(param) = iter.next() {
             write!(
                 f,
-                "{colon}{param}{trailing_space}",
-                colon = if previous_param_was_channel {
-                    previous_param_was_channel = false;
-                    ":"
-                } else {
-                    ""
-                },
+                "{param}{trailing_space}",
                 param = param,
                 trailing_space = if iter.peek().is_some() { " " } else { "" }
             )?;
-
-            // after writing the #channel param, the next one must be prefixed with :
-            if param.starts_with('#') {
-                previous_param_was_channel = true;
-            }
         }
 
         Ok(())
@@ -308,9 +342,13 @@ impl<'a> fmt::Display for Params<'a> {
 }
 
 impl<'a> Params<'a> {
+    /// Parse a params list
+    ///
+    /// Valid form: `[:]param0 [:]param1 [:]param2 [:]param3"
     pub fn parse(data: &str) -> Params {
         Params(
-            data.split(' ')
+            data.trim_start()
+                .split(' ')
                 .map(|p| p.strip_prefix(':').unwrap_or(p))
                 .filter(|p| !p.is_empty())
                 .collect(),
@@ -318,14 +356,23 @@ impl<'a> Params<'a> {
     }
 }
 
-impl<'a> Message<'a> {
-    pub fn parse(source: &str) -> Result<Message, ParseError> {
+impl<'a> IrcMessage<'a> {
+    /// Parse a raw IRC Message
+    ///
+    /// Parses some Twitch-specific things, such as
+    /// nick-only prefixes being host-only, or
+    /// the #<channel id> always being present
+    /// before :params
+    pub fn parse(source: &str) -> Result<IrcMessage, ParseError> {
         let (tags, remainder) = Tags::parse(source)?;
         let (prefix, remainder) = Prefix::parse(remainder)?;
         let (cmd, remainder) = Command::parse(remainder)?;
+        let (channel, remainder) = Channel::parse(remainder)?;
+        println!("{}", channel);
         let params = Params::parse(remainder);
 
-        Ok(Message {
+        Ok(IrcMessage {
+            channel,
             params,
             cmd,
             tags,
@@ -335,9 +382,13 @@ impl<'a> Message<'a> {
     }
 }
 
-impl<'a> fmt::Display for Message<'a> {
+impl<'a> fmt::Display for IrcMessage<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {} {}", self.tags, self.prefix, self.cmd, self.params)
+        write!(
+            f,
+            "{} {} {} {} {}",
+            self.tags, self.prefix, self.cmd, self.channel, self.params
+        )
     }
 }
 
@@ -473,8 +524,9 @@ mod tests {
             :jun1orrrr!jun1orrrr@jun1orrrr.tmi.twitch.tv PRIVMSG #pajlada :dank cam\
         ";
         assert_eq!(
-            Message {
-                params: Params(vec!["#pajlada", "dank", "cam"]),
+            IrcMessage {
+                channel: Channel("pajlada"),
+                params: Params(vec!["dank", "cam"]),
                 cmd: Command::Privmsg,
                 tags: Tags(vec![
                     ("badge-info", ""),
@@ -499,7 +551,7 @@ mod tests {
                 },
                 source: src
             },
-            Message::parse(src).unwrap()
+            IrcMessage::parse(src).unwrap()
         );
     }
 
@@ -525,8 +577,9 @@ mod tests {
             ",
             &format!(
                 "{}",
-                Message {
-                    params: Params(vec!["#pajlada", "dank", "cam"]),
+                IrcMessage {
+                    channel: Channel("pajlada"),
+                    params: Params(vec!["dank", "cam"]),
                     cmd: Command::Privmsg,
                     tags: Tags(vec![
                         ("badge-info", ""),
