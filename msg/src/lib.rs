@@ -9,6 +9,9 @@ use thiserror::Error;
 // https://github.com/d-fischer/twitch/blob/main/packages/twitch-chat-client/src/Toolkit/MessageTools.ts
 // https://github.com/robotty/twitch-irc-rs/blob/master/src/message/mod.rs
 
+// TODO: simplify some of this code
+// maybe a simple state machine instead of all this str.find() stuff
+
 #[derive(Error, Debug, PartialEq)]
 pub enum ParseError {
     #[error("Invalid tag '{0}'")]
@@ -56,7 +59,6 @@ impl<'a> Channel<'a> {
         // as
         // <channel>
         let channel = &data[start + 1..end];
-        println!("------>{}", channel);
         if channel.is_empty() {
             return Err(ParseError::MissingChannel);
         }
@@ -74,7 +76,6 @@ impl<'a> Deref for Channel<'a> {
 
 impl<'a> fmt::Display for Channel<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        println!("-->{}", self.0);
         write!(f, "#{}", self.0)
     }
 }
@@ -210,7 +211,9 @@ impl<'a> fmt::Display for Tags<'a> {
 impl<'a> Tags<'a> {
     /// Parses IRC tags in the form
     ///
-    /// `@key0=value0;key1=value1;...;keyN=valueN; `
+    /// `@key0=[value0];key1=[value1];...;keyN-1=[valueN-1];keyN=[valueN] `
+    ///
+    /// `[value]` means it is optional
     ///
     /// Returns (tags, remainder)
     pub fn parse(data: &'a str) -> Result<(Tags<'a>, &'a str), ParseError> {
