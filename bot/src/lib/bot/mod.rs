@@ -87,8 +87,8 @@ impl<'lua> Bot<'lua> {
     }
 
     #[inline]
-    pub fn is_boss(&self, name: &str) -> bool {
-        self.config.gym_staff.contains(name)
+    pub fn is_manager(&self, name: &str) -> bool {
+        self.config.management.contains(name)
     }
 
     pub async fn run(mut self, lua: &mlua::Lua, dispatcher: Dispatcher) {
@@ -126,12 +126,12 @@ impl<'lua> Bot<'lua> {
             return;
         }
 
-        if evt.data.trim() == "xD stop" && self.is_boss(&evt.name) {
+        if evt.data.trim() == "xD stop" && self.is_manager(&evt.name) {
             self.stop();
             return;
         }
 
-        if evt.data.starts_with("xD reload all") && self.is_boss(&evt.name) {
+        if evt.data.starts_with("xD reload all") && self.is_manager(&evt.name) {
             log::info!("Attempting to reload commands.json");
             match load_commands(lua, "commands.json") {
                 Ok(commands) => {
@@ -152,7 +152,7 @@ impl<'lua> Bot<'lua> {
             return;
         }
 
-        if evt.data.starts_with("xD reload ") && self.is_boss(&evt.name) {
+        if evt.data.starts_with("xD reload ") && self.is_manager(&evt.name) {
             let _message = util::strip_prefix(&evt.data, "xD reload ");
             match util::reload_command(&mut self.commands, _message, |cmd| {
                 util::load_file(&cmd.path)
