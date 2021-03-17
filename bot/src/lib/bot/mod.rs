@@ -100,7 +100,7 @@ impl<'lua> Bot<'lua> {
 
         self.send(
             &"moscowwbish".into_channel().unwrap(),
-            "gachiHYPER I'M READY",
+            "I'm ready!",
         )
         .await;
 

@@ -34,17 +34,5 @@
     "stats": {
         "usage": "Shows the channel stats",
         "script": "scripts/ppga/stats.ppga"
-    },
-    "mrgay": {
-        "usage": "mr gay",
-        "script": "scripts/ppga/mrgay.ppga"
-    },
-    "spank": {
-        "usage": "spank [user]. Spank the boy next door",
-        "script": "scripts/ppga/spank.ppga"
-    },
-    "channel": {
-        "usage": "channel. Execute as soon as SUPER ♂ GACHI ♂ SAIYAN starts to play gachiSS",
-        "script": "scripts/ppga/channel.ppga"
     }
 }

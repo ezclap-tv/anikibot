@@ -3,6 +3,12 @@
 use std::{fmt, ops::Deref};
 use thiserror::Error;
 
+// TODO: add to acknowledgements
+// references:
+// https://dev.twitch.tv/docs/irc/commands
+// https://github.com/d-fischer/twitch/blob/main/packages/twitch-chat-client/src/Toolkit/MessageTools.ts
+// https://github.com/robotty/twitch-irc-rs/blob/master/src/message/mod.rs
+
 #[derive(Error, Debug, PartialEq)]
 pub enum ParseError {
     #[error("Invalid tag '{0}'")]
