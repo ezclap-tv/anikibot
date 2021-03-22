@@ -9,9 +9,7 @@ pub struct SongRequests<'a> {
 
 impl<'a> SongRequests<'a> {
     /// Creates a new `SongRequests` object.
-    pub fn new(api: &'a StreamElementsAPI) -> Self {
-        Self { api }
-    }
+    pub fn new(api: &'a StreamElementsAPI) -> Self { Self { api } }
 
     /// Retrieves the song request settings of the API user.
     #[inline(always)]
@@ -49,11 +47,7 @@ impl<'a> SongRequests<'a> {
     }
 
     /// Queues the given song in the given channel.
-    pub async fn queue_song_in_channel(
-        &self,
-        channel_id: &str,
-        song_url: &str,
-    ) -> APIResult<Response> {
+    pub async fn queue_song_in_channel(&self, channel_id: &str, song_url: &str) -> APIResult<Response> {
         self.api
             .post_method_for_channel_id(channel_id, "songrequest", "queue")
             .json(&json!({ "video": song_url }))
@@ -64,7 +58,6 @@ impl<'a> SongRequests<'a> {
     /// Queues the given song in the API user's channel.
     #[inline(always)]
     pub async fn queue_song(&self, song_url: &str) -> APIResult<Response> {
-        self.queue_song_in_channel(&self.api.channel_id(), song_url)
-            .await
+        self.queue_song_in_channel(&self.api.channel_id(), song_url).await
     }
 }

@@ -13,7 +13,5 @@ pub struct YouTubeVideo {
 }
 
 impl YouTubeVideo {
-    pub fn into_url(self) -> String {
-        format!("https://www.youtube.com/watch?v={}", self.id)
-    }
+    pub fn into_url(self) -> String { format!("https://www.youtube.com/watch?v={}", self.id) }
 }

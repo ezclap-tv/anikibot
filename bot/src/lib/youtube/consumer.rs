@@ -1,6 +1,7 @@
+use mlua::{Lua, ToLua, UserData, UserDataMethods};
+
 use super::communication::{APIRequestKind, APIResponse, RequestSender};
 use crate::lua::JsonValue;
-use mlua::{Lua, ToLua, UserData, UserDataMethods};
 
 #[derive(Debug, Clone)]
 pub struct ConsumerYouTubePlaylistAPI {
@@ -8,28 +9,17 @@ pub struct ConsumerYouTubePlaylistAPI {
 }
 
 impl ConsumerYouTubePlaylistAPI {
-    pub fn new(tx: RequestSender) -> Self {
-        Self { tx }
-    }
+    pub fn new(tx: RequestSender) -> Self { Self { tx } }
 
     pub async fn set_playlist<S: Into<String>>(&self, playlist_id: S) -> APIResponse {
-        yt_api_send!(
-            self,
-            APIRequestKind::Playlist_Set {
-                id: playlist_id.into()
-            }
-        )
+        yt_api_send!(self, APIRequestKind::Playlist_Set { id: playlist_id.into() })
     }
 
     pub async fn set_page_size(&self, page_size: usize) -> APIResponse {
         yt_api_send!(self, APIRequestKind::Playlist_SetPageSize(page_size))
     }
 
-    pub async fn configure<S: Into<String>>(
-        &self,
-        playlist_id: S,
-        page_size: usize,
-    ) -> APIResponse {
+    pub async fn configure<S: Into<String>>(&self, playlist_id: S, page_size: usize) -> APIResponse {
         yt_api_send!(
             self,
             APIRequestKind::Playlist_Configure {
@@ -39,41 +29,26 @@ impl ConsumerYouTubePlaylistAPI {
         )
     }
 
-    pub async fn get_playlist(&self) -> APIResponse {
-        yt_api_send!(self, APIRequestKind::Playlist_Get)
-    }
+    pub async fn get_playlist(&self) -> APIResponse { yt_api_send!(self, APIRequestKind::Playlist_Get) }
 
-    pub async fn get_page_size(&self) -> APIResponse {
-        yt_api_send!(self, APIRequestKind::Playlist_GetPageSize)
-    }
+    pub async fn get_page_size(&self) -> APIResponse { yt_api_send!(self, APIRequestKind::Playlist_GetPageSize) }
 
-    pub async fn get_config(&self) -> APIResponse {
-        yt_api_send!(self, APIRequestKind::Playlist_GetConfig)
-    }
+    pub async fn get_config(&self) -> APIResponse { yt_api_send!(self, APIRequestKind::Playlist_GetConfig) }
 
     pub async fn get_playlist_videos(&self) -> APIResponse {
         yt_api_send!(self, APIRequestKind::Playlist_GetPlaylistVideos)
     }
 }
 
-fn handle_api_response(
-    lua: &Lua,
-    response: APIResponse,
-) -> mlua::Result<(mlua::Value, mlua::Value)> {
+fn handle_api_response(lua: &Lua, response: APIResponse) -> mlua::Result<(mlua::Value, mlua::Value)> {
     match response {
         Ok(response) => match response {
-            super::communication::APIResponseMessage::Done => {
-                Ok((lua_str!(lua, "Done"), mlua::Value::Nil))
-            }
+            super::communication::APIResponseMessage::Done => Ok((lua_str!(lua, "Done"), mlua::Value::Nil)),
             super::communication::APIResponseMessage::Number(n) => {
                 Ok((lua_str!(lua, &n.to_string()), mlua::Value::Nil))
             }
-            super::communication::APIResponseMessage::Str(s) => {
-                Ok((lua_str!(lua, &s), mlua::Value::Nil))
-            }
-            super::communication::APIResponseMessage::Json(o) => {
-                Ok((JsonValue(o).to_lua(lua)?, mlua::Value::Nil))
-            }
+            super::communication::APIResponseMessage::Str(s) => Ok((lua_str!(lua, &s), mlua::Value::Nil)),
+            super::communication::APIResponseMessage::Json(o) => Ok((JsonValue(o).to_lua(lua)?, mlua::Value::Nil)),
             super::communication::APIResponseMessage::Config(c) => {
                 let table = lua.create_table()?;
                 table.set("items_per_page", c.items_per_page)?;

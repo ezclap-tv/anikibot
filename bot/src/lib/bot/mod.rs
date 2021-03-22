@@ -6,15 +6,12 @@ pub mod util;
 
 use std::collections::HashMap;
 
+use command::{load_commands, Command};
 use mlua::{ToLua, UserData, UserDataMethods};
 use tokio::stream::StreamExt as _;
 use twitchchat::{events, messages, Control, Dispatcher, IntoChannel};
 
-use crate::{
-    stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI,
-    BackendError,
-};
-use command::{load_commands, Command};
+use crate::{stream_elements::consumer::ConsumerStreamElementsAPI, youtube::ConsumerYouTubePlaylistAPI, BackendError};
 
 /* Previously had commands: ping, ping uptime, whoami, song, song queue */
 
@@ -87,9 +84,7 @@ impl<'lua> Bot<'lua> {
     }
 
     #[inline]
-    pub fn is_manager(&self, name: &str) -> bool {
-        self.config.management.contains(name)
-    }
+    pub fn is_manager(&self, name: &str) -> bool { self.config.management.contains(name) }
 
     pub async fn run(mut self, lua: &mlua::Lua, dispatcher: Dispatcher) {
         let mut events = dispatcher.subscribe::<events::All>();
@@ -98,11 +93,7 @@ impl<'lua> Bot<'lua> {
 
         self.join_configured_channels(&ready.nickname).await;
 
-        self.send(
-            &"moscowwbish".into_channel().unwrap(),
-            "I'm ready!",
-        )
-        .await;
+        self.send(&"moscowwbish".into_channel().unwrap(), "I'm ready!").await;
 
         while let Some(event) = events.next().await {
             if let messages::AllCommands::Privmsg(msg) = &*event {
@@ -111,9 +102,7 @@ impl<'lua> Bot<'lua> {
         }
     }
 
-    pub fn stop(&mut self) {
-        self.control.stop();
-    }
+    pub fn stop(&mut self) { self.control.stop(); }
 
     async fn handle_msg(&mut self, evt: &messages::Privmsg<'_>, lua: &'lua mlua::Lua) {
         if !evt.data.starts_with("xD") {
@@ -137,11 +126,8 @@ impl<'lua> Bot<'lua> {
                 Ok(commands) => {
                     log::info!("Successfully reloaded commands.json");
                     self.commands = commands;
-                    self.send(
-                        &evt.channel,
-                        format!("👉 Successfully reloaded the commands file."),
-                    )
-                    .await
+                    self.send(&evt.channel, format!("👉 Successfully reloaded the commands file."))
+                        .await
                 }
                 Err(e) => {
                     log::error!("Failed to reload commands.json: {}", e);
@@ -161,11 +147,8 @@ impl<'lua> Bot<'lua> {
                     .map_err(|e| e.inner)
             }) {
                 Ok(_) => {
-                    self.send(
-                        &evt.channel,
-                        format!("👉 Successfully reloaded `{}`", _message),
-                    )
-                    .await
+                    self.send(&evt.channel, format!("👉 Successfully reloaded `{}`", _message))
+                        .await
                 }
                 Err(e) => {
                     log::error!("Failed to reload `{}`: {}", _message, e);
@@ -185,8 +168,7 @@ impl<'lua> Bot<'lua> {
                     return;
                 }
             };
-            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage))
-                .await;
+            self.send(&evt.channel, format!("FeelsDankMan 👉 {}", data.usage)).await;
             return;
         }
 
@@ -230,20 +212,14 @@ impl<'lua> Bot<'lua> {
                                 "Failed to create a new tokio runtime: {:?}"
                             );
                             rt.block_on(async move {
-                                let response = fun
-                                    .call_async::<mlua::Variadic<String>, Option<String>>(args)
-                                    .await;
+                                let response = fun.call_async::<mlua::Variadic<String>, Option<String>>(args).await;
                                 let response = match response {
                                     Ok(Some(resp)) => resp,
                                     Ok(None) => return,
                                     Err(e) => {
                                         thread_error!("Failed to execute script: {:?}", e);
-                                        send_in_thread(
-                                            &mut control,
-                                            &channel,
-                                            "WAYTOODANK devs broke something!",
-                                        )
-                                        .await;
+                                        send_in_thread(&mut control, &channel, "WAYTOODANK devs broke something!")
+                                            .await;
                                         return;
                                     }
                                 };
@@ -277,54 +253,32 @@ impl<'lua> Bot<'lua> {
 
     pub async fn join(&mut self, channel: &str, nickname: &str) {
         log::info!("Connected to {} as {}", &channel, nickname);
-        self.control
-            .writer()
-            .join(channel)
-            .await
-            .unwrap_or_else(|e| {
-                log::error!(
-                    "Caught a critical error while joining a channel {}: {:?}",
-                    channel,
-                    e
-                );
-            })
+        self.control.writer().join(channel).await.unwrap_or_else(|e| {
+            log::error!("Caught a critical error while joining a channel {}: {:?}", channel, e);
+        })
     }
 
     async fn join_configured_channels(&mut self, nickname: &str) {
         for channel in self.config.channels.iter() {
             log::info!("Connected to {} as {}", &channel, nickname);
-            self.control
-                .writer()
-                .join(channel)
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!(
-                        "Caught a critical error while joining a channel {}: {:?}",
-                        channel,
-                        e
-                    );
-                })
+            self.control.writer().join(channel).await.unwrap_or_else(|e| {
+                log::error!("Caught a critical error while joining a channel {}: {:?}", channel, e);
+            })
         }
     }
 
     async fn send<S: Into<String>>(&mut self, channel: &str, message: S) {
-        send(&mut self.control, channel, message)
-            .await
-            .unwrap_or_else(|e| {
-                log::error!(
-                    "Caught a critical error while sending a response to the channel {}: {:?}",
-                    channel,
-                    e
-                );
-            })
+        send(&mut self.control, channel, message).await.unwrap_or_else(|e| {
+            log::error!(
+                "Caught a critical error while sending a response to the channel {}: {:?}",
+                channel,
+                e
+            );
+        })
     }
 }
 
-async fn send<S: Into<String>>(
-    control: &mut Control,
-    channel: &str,
-    message: S,
-) -> Result<(), twitchchat::Error> {
+async fn send<S: Into<String>>(control: &mut Control, channel: &str, message: S) -> Result<(), twitchchat::Error> {
     control.writer().privmsg(channel, message.into()).await
 }
 
@@ -359,19 +313,16 @@ impl UserData for BotInfo {
         methods.add_method("uptime", |_, instance, ()| {
             Ok(util::duration_format(chrono::Utc::now() - instance.start))
         });
-        methods.add_async_method(
-            "send",
-            |lua, mut instance, (chan, msg): (String, String)| async move {
-                let res = instance.control.writer().privmsg(&chan, msg).await;
-                Ok(match res {
-                    Ok(()) => (mlua::Value::Boolean(true), mlua::Value::Nil),
-                    Err(e) => (
-                        mlua::Value::Nil,
-                        mlua::Value::String(lua.create_string(&e.to_string())?),
-                    ),
-                })
-            },
-        );
+        methods.add_async_method("send", |lua, mut instance, (chan, msg): (String, String)| async move {
+            let res = instance.control.writer().privmsg(&chan, msg).await;
+            Ok(match res {
+                Ok(()) => (mlua::Value::Boolean(true), mlua::Value::Nil),
+                Err(e) => (
+                    mlua::Value::Nil,
+                    mlua::Value::String(lua.create_string(&e.to_string())?),
+                ),
+            })
+        });
     }
 }
 

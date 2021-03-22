@@ -7,7 +7,8 @@ pub struct StreamElementsConfig {
 
 impl StreamElementsConfig {
     // XXX: maybe unpepega this error type
-    /// Create a new config using the given token. The token must be a valid ASCII string.
+    /// Create a new config using the given token. The token must be a valid
+    /// ASCII string.
     pub fn with_token(jwt_token: String) -> Result<Self, String> {
         if jwt_token.is_ascii() {
             Ok(Self {
@@ -20,7 +21,5 @@ impl StreamElementsConfig {
     }
 
     /// Set a channel id.
-    pub fn channel_id(self, channel_id: String) -> Self {
-        Self { channel_id, ..self }
-    }
+    pub fn channel_id(self, channel_id: String) -> Self { Self { channel_id, ..self } }
 }

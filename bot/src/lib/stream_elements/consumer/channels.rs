@@ -2,10 +2,10 @@
 //!
 //! [`StreamElement's API reference`]: https://docs.streamelements.com/reference/
 
-use super::handle_api_response;
-
-use crate::stream_elements::communication::{APIRequestKind, APIResponse, RequestSender};
 use mlua::{UserData, UserDataMethods};
+
+use super::handle_api_response;
+use crate::stream_elements::communication::{APIRequestKind, APIResponse, RequestSender};
 
 /// Implements the `channels` API methods.
 #[derive(Clone)]
@@ -15,19 +15,13 @@ pub struct Channels {
 
 impl Channels {
     /// Creates a new `Channels` object.
-    pub fn new(tx: RequestSender) -> Self {
-        Self { tx }
-    }
+    pub fn new(tx: RequestSender) -> Self { Self { tx } }
 
     /// Retrieves the channel information of the API user.
-    pub async fn me(&self) -> APIResponse {
-        api_send!(self, APIRequestKind::Channel_Me)
-    }
+    pub async fn me(&self) -> APIResponse { api_send!(self, APIRequestKind::Channel_Me) }
 
     /// Retrieves the channel id of the API user.
-    pub async fn my_id(&self) -> APIResponse {
-        api_send!(self, APIRequestKind::Channel_MyId)
-    }
+    pub async fn my_id(&self) -> APIResponse { api_send!(self, APIRequestKind::Channel_MyId) }
 
     /// Retrieves the channel information of the user with the given name.
     pub async fn channel<S: Into<String>>(&self, name: S) -> APIResponse {

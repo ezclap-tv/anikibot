@@ -1,25 +1,17 @@
-use super::util;
-use crate::BackendError;
-use serde::Deserialize;
 use std::collections::HashMap;
 
-pub(crate) fn load_lua<'a>(
-    lua: &'a mlua::Lua,
-    name: &str,
-    source: &str,
-) -> Result<mlua::Function<'a>, BackendError> {
-    lua.load(source).into_function().map_err(|e| {
-        BackendError::from(format!(
-            "Failed to load the LUA script for `{}`: {}",
-            name, e
-        ))
-    })
+use serde::Deserialize;
+
+use super::util;
+use crate::BackendError;
+
+pub(crate) fn load_lua<'a>(lua: &'a mlua::Lua, name: &str, source: &str) -> Result<mlua::Function<'a>, BackendError> {
+    lua.load(source)
+        .into_function()
+        .map_err(|e| BackendError::from(format!("Failed to load the LUA script for `{}`: {}", name, e)))
 }
 
-fn transform<'a>(
-    lua: &'a mlua::Lua,
-    commands: HashMap<String, CommandJSON>,
-) -> HashMap<String, Command> {
+fn transform<'a>(lua: &'a mlua::Lua, commands: HashMap<String, CommandJSON>) -> HashMap<String, Command> {
     let mut transformed: HashMap<String, Command> = HashMap::new();
     for (name, command) in commands {
         let data: Option<CommandData> = match (command.usage, command.script) {
@@ -31,8 +23,7 @@ fn transform<'a>(
                 script: load_lua(
                     &lua,
                     &name,
-                    &util::load_file(&script)
-                        .unwrap_or_else(|e| panic!("Failed to load file {}: {}", script, e)),
+                    &util::load_file(&script).unwrap_or_else(|e| panic!("Failed to load file {}: {}", script, e)),
                 )
                 .unwrap_or_else(|e| panic!("Failed to load the script {}: {}", script, e)),
             }),
@@ -54,18 +45,13 @@ fn transform<'a>(
     transformed
 }
 
-pub fn load_commands<'a>(
-    lua: &'a mlua::Lua,
-    path: &str,
-) -> Result<HashMap<String, Command<'a>>, BackendError> {
+pub fn load_commands<'a>(lua: &'a mlua::Lua, path: &str) -> Result<HashMap<String, Command<'a>>, BackendError> {
     Ok(transform(
         lua,
-        util::parse_json(&util::load_file(path).map_err(|e| {
-            BackendError::from(format!(
-                "Failed to locate the commands json at {}: {}",
-                path, e
-            ))
-        })?)?,
+        util::parse_json(
+            &util::load_file(path)
+                .map_err(|e| BackendError::from(format!("Failed to locate the commands json at {}: {}", path, e)))?,
+        )?,
     ))
 }
 

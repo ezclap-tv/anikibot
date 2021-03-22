@@ -1,6 +1,7 @@
+use tokio::sync::{mpsc, oneshot};
+
 use super::stats::StatsSettings;
 use crate::BackendError;
-use tokio::sync::{mpsc, oneshot};
 
 /// The type that is send back by the API thread.
 pub type APIResponse = Result<APIResponseMessage, BackendError>;
@@ -105,9 +106,10 @@ pub(crate) fn spawn_api_thread(
                     }
                     // Stats API
                     APIRequestKind::Stats_MyStats { settings } => {
-                        // NOTE: This macro performs an extra to-json conversion to simplify LUA interop.
+                        // NOTE: This macro performs an extra to-json conversion to simplify LUA
+                        // interop.
                         resp_json_from_struct!(api.stats().set_settings(settings).my_stats().await)
-                    },
+                    }
                     APIRequestKind::Stats_ChannelStats { channel_id, settings } => {
                         resp_json_from_struct!(api.stats().set_settings(settings).stats_for_channel(&channel_id).await)
                     }
@@ -127,18 +129,13 @@ pub(crate) fn spawn_api_thread(
                     APIRequestKind::SongReq_QueueSong { song_url } => {
                         resp_json!(api.song_requests().queue_song(&song_url).await)
                     }
-                    APIRequestKind::SongReq_QueueSongInChannel {
-                        channel_id,
-                        song_url,
-                    } => resp_json!(
-                        api.song_requests()
-                            .queue_song_in_channel(&channel_id, &song_url)
-                            .await
-                    ),
+                    APIRequestKind::SongReq_QueueSongInChannel { channel_id, song_url } => {
+                        resp_json!(api.song_requests().queue_song_in_channel(&channel_id, &song_url).await)
+                    }
                     APIRequestKind::SongReq_QueueMany { song_urls } => {
                         if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
                             log::info!(
-                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread",
                                 song_urls.len(),
                                 QUEUE_TASK_SEND_THRESHOLD,
                             );
@@ -153,13 +150,10 @@ pub(crate) fn spawn_api_thread(
                             queue_many(&api, api.channel_id(), song_urls).await
                         }
                     }
-                    APIRequestKind::SongReq_QueueManyInChannel {
-                        channel_id,
-                        song_urls,
-                    } => {
+                    APIRequestKind::SongReq_QueueManyInChannel { channel_id, song_urls } => {
                         if song_urls.len() > QUEUE_TASK_SEND_THRESHOLD {
                             log::info!(
-                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread", 
+                                "Queue size threshold reached ({} > {}), sending the queueing task to another thread",
                                 song_urls.len(),
                                 QUEUE_TASK_SEND_THRESHOLD,
                             );
@@ -196,11 +190,7 @@ async fn queue_many(
     let mut queued = 0;
     let mut had_error = false;
     for song in song_urls {
-        match api
-            .song_requests()
-            .queue_song_in_channel(&channel_id, &song)
-            .await
-        {
+        match api.song_requests().queue_song_in_channel(&channel_id, &song).await {
             Ok(r) => {
                 queued += 1;
                 log::info!(
@@ -215,11 +205,7 @@ async fn queue_many(
                 )
             }
             Err(e) => {
-                log::error!(
-                    "Failed to queue the song with url={}, \nError was: {}",
-                    song,
-                    e
-                );
+                log::error!("Failed to queue the song with url={}, \nError was: {}", song, e);
                 had_error = true;
             }
         }
@@ -230,8 +216,6 @@ async fn queue_many(
             songs_total - queued,
         )))
     } else {
-        Ok(APIResponseMessage::Json(serde_json::json!({
-            "queued": queued
-        })))
+        Ok(APIResponseMessage::Json(serde_json::json!({ "queued": queued })))
     }
 }

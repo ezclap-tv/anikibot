@@ -1,5 +1,6 @@
-use mlua::{Lua, UserData, UserDataMethods, Variadic};
 use std::time::Duration;
+
+use mlua::{Lua, UserData, UserDataMethods, Variadic};
 
 /// Initializes utility globals
 pub fn init_util_globals(lua: &Lua) {
@@ -95,11 +96,7 @@ fn lua_value_to_string<'lua>(v: &mlua::Value<'lua>, is_top_level: bool) -> Strin
             t.clone()
                 .pairs::<mlua::Value, mlua::Value>()
                 .map(|r| match r {
-                    Ok((k, v)) => format!(
-                        "{}: {}",
-                        lua_value_to_string(&k, false),
-                        lua_value_to_string(&v, false)
-                    ),
+                    Ok((k, v)) => format!("{}: {}", lua_value_to_string(&k, false), lua_value_to_string(&v, false)),
                     Err(e) => format!("{:?}", e),
                 })
                 .collect::<Vec<_>>()

@@ -10,11 +10,9 @@ extern crate twitchchat;
 
 extern crate backend;
 
-use backend::{
-    lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI,
-    StreamElementsConfig,
-};
 use std::convert::Into;
+
+use backend::{lua::init_globals, youtube::YouTubePlaylistAPI, Bot, Secrets, StreamElementsAPI, StreamElementsConfig};
 use twitchchat::{Dispatcher, RateLimit, Runner, Status};
 
 #[tokio::main]
@@ -40,19 +38,18 @@ async fn main() {
     let bot = {
         let mut builder = Bot::builder(control);
         if let Some(ref key) = secrets.stream_elements_jwt_token {
-            let (api, handle) = StreamElementsAPI::with_config(
-                StreamElementsConfig::with_token(key.to_owned()).unwrap(),
-            )
-            .start(tokio::runtime::Handle::current())
-            .await
-            .expect("Failed to start thread");
+            let (api, handle) =
+                StreamElementsAPI::with_config(StreamElementsConfig::with_token(key.to_owned()).unwrap())
+                    .start(tokio::runtime::Handle::current())
+                    .await
+                    .expect("Failed to start thread");
 
             thread_handles.push(handle);
             builder = builder.add_streamelements_api(api);
         }
         if let Some(ref key) = secrets.youtube_api_key {
-            let (api, handle) = YouTubePlaylistAPI::with_api_key(key.to_owned())
-                .start(tokio::runtime::Handle::current());
+            let (api, handle) =
+                YouTubePlaylistAPI::with_api_key(key.to_owned()).start(tokio::runtime::Handle::current());
             thread_handles.push(handle);
             builder = builder.add_youtube_api(api);
         }

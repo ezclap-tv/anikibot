@@ -21,14 +21,13 @@ pub struct StatsSettings {
 }
 
 impl Default for StatsSettings {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl StatsSettings {
     /// Creates a new `StatsSettings` object configured to fetch
-    /// the stats for the past week with the current date (UTC) in the ISO 8601 format.
+    /// the stats for the past week with the current date (UTC) in the ISO 8601
+    /// format.
     pub fn new() -> Self {
         Self {
             interval: StatsInterval::Year,
@@ -38,21 +37,16 @@ impl StatsSettings {
     }
 
     /// Updates the field `interval` to the given interval value.
-    pub fn interval(self, interval: StatsInterval) -> Self {
-        Self { interval, ..self }
-    }
+    pub fn interval(self, interval: StatsInterval) -> Self { Self { interval, ..self } }
 
     /// Updates the field `timezone` to the given timezone value.
-    pub fn timezone(self, timezone: TimeZone) -> Self {
-        Self { timezone, ..self }
-    }
+    pub fn timezone(self, timezone: TimeZone) -> Self { Self { timezone, ..self } }
 
     /// Updates the field `date` to the given [`Date`] value.
-    pub fn date(self, date: Date<Utc>) -> Self {
-        Self { date, ..self }
-    }
+    pub fn date(self, date: Date<Utc>) -> Self { Self { date, ..self } }
 
-    /// Updates the field `date` to the date part of the given [`DateTime`] value.
+    /// Updates the field `date` to the date part of the given [`DateTime`]
+    /// value.
     pub fn date_from_datetime(self, date: DateTime<Utc>) -> Self {
         Self {
             date: date.date(),
@@ -77,7 +71,5 @@ impl std::fmt::Debug for StatsInterval {
 }
 
 impl ToString for StatsInterval {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
-    }
+    fn to_string(&self) -> String { format!("{:?}", self) }
 }

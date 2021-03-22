@@ -37,17 +37,11 @@ impl From<String> for BackendError {
 }
 
 impl From<reqwest::Error> for BackendError {
-    fn from(e: reqwest::Error) -> Self {
-        Self {
-            inner: Box::from(e),
-        }
-    }
+    fn from(e: reqwest::Error) -> Self { Self { inner: Box::from(e) } }
 }
 
 impl From<BoxedError> for BackendError {
-    fn from(inner: BoxedError) -> Self {
-        Self { inner }
-    }
+    fn from(inner: BoxedError) -> Self { Self { inner } }
 }
 
 impl std::fmt::Display for BackendError {

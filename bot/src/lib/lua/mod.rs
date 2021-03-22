@@ -1,9 +1,11 @@
 mod util;
 
-use crate::bot::{init_api_globals, Bot};
-use mlua::{Lua, ToLua};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+use mlua::{Lua, ToLua};
 use util::init_util_globals;
+
+use crate::bot::{init_api_globals, Bot};
 
 // TODO: move this where it makes sense
 pub struct JsonValue(pub serde_json::Value);
@@ -14,9 +16,7 @@ impl<'lua> ToLua<'lua> for JsonValue {
                 lua.create_sequence_from(a.into_iter().map(JsonValue))?,
             )),
             serde_json::Value::Bool(b) => Ok(mlua::Value::Boolean(b)),
-            serde_json::Value::Number(n) => {
-                Ok(mlua::Value::Number(n.as_f64().expect("good one dude LULW")))
-            }
+            serde_json::Value::Number(n) => Ok(mlua::Value::Number(n.as_f64().expect("good one dude LULW"))),
             serde_json::Value::Object(o) => Ok(mlua::Value::Table(
                 lua.create_table_from(o.into_iter().map(|(k, v)| (k, JsonValue(v))))?,
             )),

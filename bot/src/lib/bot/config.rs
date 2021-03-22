@@ -1,5 +1,6 @@
-use serde::Deserialize;
 use std::collections::HashSet;
+
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct BotConfig {

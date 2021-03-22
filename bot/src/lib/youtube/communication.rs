@@ -1,10 +1,9 @@
 use tokio::sync::{mpsc, oneshot};
 
-use crate::BackendError;
-
 use super::api::YouTubePlaylistAPI;
 use super::config::YouTubeAPIConfig;
 use super::data::Videos;
+use crate::BackendError;
 
 /// The type that is send back by the API thread.
 pub type APIResponse = Result<APIResponseMessage, BackendError>;
@@ -43,7 +42,8 @@ pub struct APIRequestMessage {
 /// A response that contains the result of the API call if it succeeds.
 #[derive(Debug)]
 pub enum APIResponseMessage {
-    /// An empty result indicating that the requested operation have been completed successfully.
+    /// An empty result indicating that the requested operation have been
+    /// completed successfully.
     Done,
     /// A numeric result value.
     Number(usize),
@@ -99,16 +99,10 @@ pub(crate) fn spawn_api_thread(
                         Ok(APIResponseMessage::Done)
                     }
                     APIRequestKind::Playlist_Get => Ok(APIResponseMessage::Str(
-                        api.current_playlist()
-                            .map(String::from)
-                            .unwrap_or_else(String::new),
+                        api.current_playlist().map(String::from).unwrap_or_else(String::new),
                     )),
-                    APIRequestKind::Playlist_GetPageSize => {
-                        Ok(APIResponseMessage::Number(api.items_per_page))
-                    }
-                    APIRequestKind::Playlist_GetConfig => {
-                        Ok(APIResponseMessage::Config(api.get_config()))
-                    }
+                    APIRequestKind::Playlist_GetPageSize => Ok(APIResponseMessage::Number(api.items_per_page)),
+                    APIRequestKind::Playlist_GetConfig => Ok(APIResponseMessage::Config(api.get_config())),
                     APIRequestKind::Playlist_GetPlaylistVideos => {
                         yt_resp_videos!(api.get_playlist_videos().await)
                     }

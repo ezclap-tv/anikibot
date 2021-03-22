@@ -1,21 +1,16 @@
-use super::command::{Command, CommandData};
-use crate::{BackendError, BoxedError};
-use serde::Deserialize;
-use serde_json::from_str;
 use std::collections::HashMap;
 use std::iter::FromIterator;
 
-pub fn format_args(
-    evt: &twitchchat::messages::Privmsg,
-    args: Option<Vec<&str>>,
-) -> mlua::Variadic<String> {
+use serde::Deserialize;
+use serde_json::from_str;
+
+use super::command::{Command, CommandData};
+use crate::{BackendError, BoxedError};
+
+pub fn format_args(evt: &twitchchat::messages::Privmsg, args: Option<Vec<&str>>) -> mlua::Variadic<String> {
     let header = vec![evt.channel.to_string(), evt.name.to_string()];
     match args {
-        Some(args) => mlua::Variadic::from_iter(
-            header
-                .into_iter()
-                .chain(args.into_iter().map(|it| it.to_owned())),
-        ),
+        Some(args) => mlua::Variadic::from_iter(header.into_iter().chain(args.into_iter().map(|it| it.to_owned()))),
         None => mlua::Variadic::from_iter(header.into_iter()),
     }
 }
@@ -29,12 +24,10 @@ pub fn strip_prefix<'a>(str: &'a str, prefix: &str) -> &'a str {
 }
 
 pub fn load_file(path: &str) -> Result<String, BackendError> {
-    let source = std::fs::read_to_string(path).map_err(|e| {
-        BackendError::from(format!("Failed to read the lua file at `{}`: {}.", path, e))
-    })?;
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| BackendError::from(format!("Failed to read the lua file at `{}`: {}.", path, e)))?;
     if path.ends_with(".ppga") {
-        ppga::ppga_to_lua(&source, ppga::PPGAConfig::default())
-            .map_err(|ex| BackendError::from(ex.report_to_string()))
+        ppga::ppga_to_lua(&source, ppga::PPGAConfig::default()).map_err(|ex| BackendError::from(ex.report_to_string()))
     } else {
         Ok(source)
     }
@@ -44,8 +37,7 @@ pub fn parse_json<'a, R>(json: &'a str) -> Result<R, BackendError>
 where
     R: Deserialize<'a>,
 {
-    from_str(&json)
-        .map_err(|e| BackendError::from(format!("Failed to read \"commands.json\": {}", e)))
+    from_str(&json).map_err(|e| BackendError::from(format!("Failed to read \"commands.json\": {}", e)))
 }
 
 pub fn duration_format(duration: chrono::Duration) -> String {
@@ -88,8 +80,7 @@ pub fn find_command<'a, 'lua>(
                 None
             };
 
-            if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap())
-            {
+            if next.is_some() && commands.is_some() && commands.unwrap().contains_key(next.unwrap()) {
                 next_commands = match commands {
                     Some(a) => a,
                     _ => unreachable!(),

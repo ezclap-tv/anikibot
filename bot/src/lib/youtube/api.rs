@@ -1,16 +1,16 @@
+use reqwest::Client;
+use serde_json::Value;
+use tokio::runtime;
+
 use super::{
     communication::spawn_api_thread,
     consumer::ConsumerYouTubePlaylistAPI,
     data::{PlaylistPage, Videos, YouTubeVideo},
 };
 use crate::{BackendError, YouTubeAPIConfig};
-use reqwest::Client;
-use serde_json::Value;
-use tokio::runtime;
 
 /// The base part of the YouTube playlist API.
-pub const YOUTUBE_API_URL: &str =
-    "https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails";
+pub const YOUTUBE_API_URL: &str = "https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails";
 
 /// Provides a Rust interface to the YouTube Playlist API.
 pub struct YouTubePlaylistAPI {
@@ -30,10 +30,7 @@ pub struct YouTubePlaylistAPIGuard {
 
 impl YouTubePlaylistAPIGuard {
     /// Stars the API thread and returns its sender and thread handle.
-    pub fn start(
-        self,
-        runtime: runtime::Handle,
-    ) -> (ConsumerYouTubePlaylistAPI, std::thread::JoinHandle<()>) {
+    pub fn start(self, runtime: runtime::Handle) -> (ConsumerYouTubePlaylistAPI, std::thread::JoinHandle<()>) {
         let (tx, handle) = spawn_api_thread(self.api, runtime);
         (ConsumerYouTubePlaylistAPI::new(tx), handle)
     }
@@ -69,9 +66,7 @@ impl YouTubePlaylistAPI {
 
     /// Sets the request page size to the given value.
     #[inline(always)]
-    pub fn page_size(&mut self, items_per_page: usize) {
-        self.items_per_page = items_per_page;
-    }
+    pub fn page_size(&mut self, items_per_page: usize) { self.items_per_page = items_per_page; }
 
     /// Changes the current playlist.
     #[inline]
@@ -84,15 +79,11 @@ impl YouTubePlaylistAPI {
 
     /// Returns the number of videos in the playlist.
     #[inline(always)]
-    pub fn number_of_videos(&self) -> Option<usize> {
-        self.number_of_videos
-    }
+    pub fn number_of_videos(&self) -> Option<usize> { self.number_of_videos }
 
     /// Returns the id of the current playlist.
     #[inline(always)]
-    pub fn current_playlist(&self) -> Option<&str> {
-        self.playlist_id.as_ref().map(|s| &s[..])
-    }
+    pub fn current_playlist(&self) -> Option<&str> { self.playlist_id.as_ref().map(|s| &s[..]) }
 
     /// Returns the next batch of videos in the playlist.
     pub async fn get_playlist_videos(&mut self) -> Result<Videos, BackendError> {
@@ -139,15 +130,11 @@ impl YouTubePlaylistAPI {
             )));
         }
 
-        self.number_of_videos = result["pageInfo"]["totalResults"]
-            .as_u64()
-            .map(|u| u as usize);
+        self.number_of_videos = result["pageInfo"]["totalResults"].as_u64().map(|u| u as usize);
 
         Ok(PlaylistPage {
             kind: result["kind"].as_str().unwrap().to_owned(),
-            next_page_token: result
-                .get("nextPageToken")
-                .map(|v| v.as_str().unwrap().to_owned()),
+            next_page_token: result.get("nextPageToken").map(|v| v.as_str().unwrap().to_owned()),
             videos: result["items"]
                 .as_array()
                 .unwrap()
