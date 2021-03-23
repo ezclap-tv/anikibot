@@ -136,9 +136,7 @@ pub struct Tags(HashMap<UnsafeSlice, UnsafeSlice>);
 
 impl Deref for Tags {
     type Target = HashMap<UnsafeSlice, UnsafeSlice>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+    fn deref(&self) -> &Self::Target { &self.0 }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -463,9 +461,7 @@ impl Params {
         }
     }
 
-    pub fn raw(&self) -> &str {
-        self.0.as_str()
-    }
+    pub fn raw(&self) -> &str { self.0.as_str() }
 
     pub fn iter(&self) -> impl Iterator<Item = &str> {
         self.0
@@ -527,9 +523,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_command() {
-        assert_eq!(Command::Privmsg, Command::parse("PRIVMSG").0)
-    }
+    fn parse_command() { assert_eq!(Command::Privmsg, Command::parse("PRIVMSG").0) }
 
     // TODO: tests for parsing other message types
 
