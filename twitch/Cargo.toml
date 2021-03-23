@@ -4,11 +4,6 @@ version = "0.0.1"
 authors = ["jprochazk <honza.spacir@gmail.com>"]
 edition = "2018"
 
-[workspace]
-members = [
-    ".", 
-    "twitch_getters"
-]
 
 [dependencies]
 thiserror = "1.0.23"
