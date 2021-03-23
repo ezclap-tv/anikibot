@@ -1,12 +1,12 @@
-use twitch::conn::{Config, Twitch};
-use twitch::tmi::Message;
+/* use twitch::conn::{Config, Twitch};
+use twitch::tmi::Message; */
 
 #[tokio::main]
 async fn main() {
-    let (mut recv, mut sender) = Twitch::connect(Config::default()).await.unwrap();
-    sender.send("JOIN #moscowwbish\r\n").await.unwrap();
+    /* let (mut recv, mut sender) = Twitch::connect(Config::default()).await.unwrap();
+    sender.send("JOIN #moscowwbish\r\n").await.unwrap(); */
 
-    loop {
+    /* loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
                 println!("CTRL-C");
@@ -30,5 +30,5 @@ async fn main() {
                 }
             }
         }
-    }
+    } */
 }

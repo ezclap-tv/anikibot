@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::pin::Pin;
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use thiserror::Error;
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::util::UnsafeSlice;
+
+// TODO: go over each UnsafeSlice field with `pub`, and create a getter for it
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
@@ -15,28 +21,29 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Message<'a> {
+pub struct Message {
     // TODO: Params should just be a range
-    pub tags: Tags<'a>,
-    pub prefix: Prefix<'a>,
-    pub cmd: Command<'a>,
-    pub channel: Option<&'a str>,
-    pub params: Params<'a>,
-    pub source: &'a str,
+    pub tags: Tags,
+    pub prefix: Prefix,
+    pub cmd: Command,
+    pub channel: Option<UnsafeSlice>,
+    pub params: Option<Params>,
+    pub source: Pin<String>,
 }
 
-impl<'a> Message<'a> {
+impl Message {
     /// Parse a raw IRC Message
     ///
     /// Parses some Twitch-specific things, such as
     /// nick-only prefixes being host-only, or
     /// the #<channel id> always being present
     /// before :params
-    pub fn parse(source: &'a str) -> Result<Message<'a>> {
-        let (tags, remainder) = Tags::parse(source)?;
+    pub fn parse(source: String) -> Result<Message> {
+        let source = Pin::new(source);
+        let (tags, remainder) = Tags::parse(&source);
         let (prefix, remainder) = Prefix::parse(remainder)?;
-        let (cmd, remainder) = Command::parse(remainder)?;
-        let (channel, remainder) = parse_channel(remainder);
+        let (cmd, remainder) = Command::parse(remainder);
+        let (channel, remainder) = Channel::parse(remainder);
         let params = Params::parse(remainder);
 
         Ok(Message {
@@ -51,7 +58,7 @@ impl<'a> Message<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Command<'a> {
+pub enum Command {
     Ping,
     Pong,
     /// Join channel
@@ -84,14 +91,14 @@ pub enum Command<'a> {
     /// Requesting an IRC capability
     Capability,
     /// Unknown command
-    Unknown(&'a str),
+    Unknown(UnsafeSlice),
 }
 
-impl<'a> Command<'a> {
+impl Command {
     /// Parses a Twitch IRC command
     ///
     /// Returns (command, remainder)
-    pub fn parse(data: &'a str) -> Result<(Command<'a>, &'a str)> {
+    pub fn parse(data: &str) -> (Command, &str) {
         use Command::*;
         let data = data.trim_start();
         let end = match data.find(' ') {
@@ -116,18 +123,18 @@ impl<'a> Command<'a> {
             "USERNOTICE" => UserNotice,
             "USERSTATE" => UserState,
             "CAP" => Capability,
-            other => Unknown(other),
+            other => Unknown(other.into()),
         };
 
-        Ok((cmd, &data[end..]))
+        (cmd, &data[end..])
     }
 }
 
 #[derive(Clone, PartialEq, Debug)]
-pub struct Tags<'a>(HashMap<&'a str, &'a str>);
+pub struct Tags(HashMap<UnsafeSlice, UnsafeSlice>);
 
-impl<'a> Deref for Tags<'a> {
-    type Target = HashMap<&'a str, &'a str>;
+impl Deref for Tags {
+    type Target = HashMap<UnsafeSlice, UnsafeSlice>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -145,7 +152,7 @@ pub enum DurationKind {
     Weeks,
 }
 
-impl<'a> Tags<'a> {
+impl Tags {
     /// Parses IRC tags in the form
     ///
     /// `@key0=[value0];key1=[value1];...;keyN-1=[valueN-1];keyN=[valueN] `
@@ -153,24 +160,24 @@ impl<'a> Tags<'a> {
     /// `[value]`s are optional
     ///
     /// Returns (tags, remainder)
-    pub fn parse(data: &'a str) -> Result<(Tags<'a>, &'a str)> {
+    pub fn parse(data: &str) -> (Tags, &str) {
         let data = match data.strip_prefix('@') {
             Some(v) => v,
             None => data,
         };
-        let mut map: HashMap<&'a str, &'a str> = HashMap::new();
+        let mut map: HashMap<UnsafeSlice, UnsafeSlice> = HashMap::new();
         let mut end = 0;
 
-        let mut current_key: Option<&'a str> = None;
+        let mut current_key: Option<&str> = None;
         let mut remainder = data;
         let mut local_i = 0;
-        let mut previous_char = '*';
+        let mut previous_char = "";
 
-        for (i, c) in data.char_indices() {
+        for (i, c) in data.grapheme_indices(true) {
             match current_key {
                 None => match c {
                     // when we parse ';', save key, and parse value
-                    '=' => {
+                    "=" => {
                         current_key = Some(&remainder[..local_i]);
                         // remainder is set without this '='
                         remainder = &remainder[(local_i + 1)..];
@@ -183,10 +190,10 @@ impl<'a> Tags<'a> {
                 Some(key) => match c {
                     // when we parse ';', save value, push it into map
                     // and then parse key
-                    ';' => {
+                    ";" => {
                         let value = &remainder[..local_i];
                         if !value.is_empty() {
-                            map.insert(key, value);
+                            map.insert(key.into(), value.into());
                         }
                         // remainder is set without this ';'
                         remainder = &remainder[(local_i + 1)..];
@@ -194,10 +201,10 @@ impl<'a> Tags<'a> {
                         current_key = None;
                     }
                     // if we parse a ' :', that's the end of tags
-                    ':' if previous_char == ' ' => {
+                    ":" if previous_char == " " => {
                         let value = &remainder[..(local_i - 1)];
                         if !value.trim().is_empty() {
-                            map.insert(key, value);
+                            map.insert(key.into(), value.into());
                         }
                         end = i;
                         break;
@@ -210,14 +217,14 @@ impl<'a> Tags<'a> {
             previous_char = c;
         }
 
-        Ok((Tags(map), &data[end..]))
+        (Tags(map), &data[end..])
     }
 
     /// Iterates the tags to find one with key == `key`.
-    pub fn get(&self, key: &str) -> Option<&'a str> {
+    pub fn get(&self, key: &str) -> Option<UnsafeSlice> {
         for (item_key, item_value) in self.0.iter() {
-            if key == *item_key {
-                return Some(item_value);
+            if key == item_key.as_ref() {
+                return Some(*item_value);
             }
         }
 
@@ -227,6 +234,7 @@ impl<'a> Tags<'a> {
     /// Parses a string, transforming all whitespace "\\s" to actual whitespace.
     pub fn get_ns(&self, key: &str) -> Option<String> {
         self.get(key).map(|v| {
+            let v = v.as_ref();
             let mut out = String::with_capacity(v.len());
             let mut parts = v.split("\\s").peekable();
             while let Some(part) = parts.next() {
@@ -245,8 +253,8 @@ impl<'a> Tags<'a> {
         N: std::str::FromStr,
         <N as std::str::FromStr>::Err: std::fmt::Display,
     {
-        match self.0.get(key) {
-            Some(v) => match v.parse::<N>() {
+        match self.get(key) {
+            Some(v) => match v.as_ref().parse::<N>() {
                 Ok(v) => Some(v),
                 Err(_) => None,
             },
@@ -256,8 +264,8 @@ impl<'a> Tags<'a> {
 
     /// Parses a numeric bool (0 or 1)
     pub fn get_bool(&self, key: &str) -> Option<bool> {
-        match self.0.get(key) {
-            Some(v) => match *v {
+        match self.get(key) {
+            Some(v) => match v.as_ref() {
                 "0" => Some(false),
                 "1" => Some(true),
                 _ => None,
@@ -267,9 +275,15 @@ impl<'a> Tags<'a> {
     }
 
     /// Parses a comma-separated list of values
-    pub fn get_csv(&self, key: &str) -> Option<Vec<&'a str>> {
-        match self.0.get(key) {
-            Some(v) => Some(v.split(',').filter(|v| !v.is_empty()).collect()),
+    pub fn get_csv(&self, key: &str) -> Option<Vec<UnsafeSlice>> {
+        match self.get(key) {
+            Some(v) => Some(
+                v.as_ref()
+                    .split(',')
+                    .filter(|v| !v.is_empty())
+                    .map(|v| v.into())
+                    .collect(),
+            ),
             None => None,
         }
     }
@@ -300,7 +314,7 @@ impl<'a> Tags<'a> {
 
     /// Like `.get()`, but returns an `Error` in case the key doesn't exist,
     /// or is invalid in some way
-    pub fn require(&self, key: &str) -> Result<&'a str> {
+    pub fn require(&self, key: &str) -> Result<UnsafeSlice> {
         self.get(key).ok_or_else(|| Error::MissingTag(key.into()))
     }
 
@@ -328,7 +342,7 @@ impl<'a> Tags<'a> {
 
     /// Like `.get_csv()`, but returns an `Error` in case the key doesn't exist,
     /// or is invalid in some way
-    pub fn require_csv(&self, key: &str) -> Result<Vec<&str>> {
+    pub fn require_csv(&self, key: &str) -> Result<Vec<UnsafeSlice>> {
         self.get_csv(key).ok_or_else(|| Error::MissingTag(key.into()))
     }
 
@@ -347,13 +361,13 @@ impl<'a> Tags<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Prefix<'a> {
-    pub nick: Option<&'a str>,
-    pub user: Option<&'a str>,
-    pub host: &'a str,
+pub struct Prefix {
+    pub nick: Option<UnsafeSlice>,
+    pub user: Option<UnsafeSlice>,
+    pub host: UnsafeSlice,
 }
 
-impl<'a> Prefix<'a> {
+impl Prefix {
     /// Parses an IRC prefix in one of the following forms:
     ///
     /// * `host`
@@ -384,67 +398,84 @@ impl<'a> Prefix<'a> {
                 None => (None, None, prefix),
             };
 
-            Ok((Prefix { nick, user, host }, &data[end..]))
+            Ok((
+                Prefix {
+                    nick: nick.map(|v| v.into()),
+                    user: user.map(|v| v.into()),
+                    host: host.into(),
+                },
+                &data[end..],
+            ))
         } else {
             Err(Error::MissingPrefix)
         }
     }
 }
 
-pub fn parse_channel(data: &str) -> (Option<&str>, &str) {
-    let data = data.trim_start();
-    let (mut start, mut end) = (None, data.len());
-    for (i, c) in data.char_indices() {
-        match c {
-            // No channel, because we found the start of :message
-            // TODO: write test that takes into account '#' being present in the message
-            ':' if start.is_none() => {
-                return (None, data);
+pub struct Channel;
+impl Channel {
+    pub fn parse(data: &str) -> (Option<UnsafeSlice>, &str) {
+        let data = data.trim_start();
+        let (mut start, mut end) = (None, data.len());
+        for (i, c) in data.char_indices() {
+            match c {
+                // No channel, because we found the start of :message
+                // TODO: write test that takes into account '#' being present in the message
+                ':' if start.is_none() => {
+                    return (None, data);
+                }
+                // Either we found `end`
+                ' ' if start.is_some() => {
+                    end = i;
+                    break;
+                }
+                // or nothing
+                ' ' => {
+                    return (None, data);
+                }
+                // We found `start`
+                '#' => start = Some(i),
+                _ => (),
             }
-            // Either we found `end`
-            ' ' if start.is_some() => {
-                end = i;
-                break;
-            }
-            // or nothing
-            ' ' => {
-                return (None, data);
-            }
-            // We found `start`
-            '#' => start = Some(i),
-            _ => (),
         }
-    }
-    let (start, end) = match (start, end) {
-        (Some(s), e) => (s, e),
-        _ => return (None, data),
-    };
-    let (channel, remainder) = data[start..].split_at(end);
-    (Some(&channel[1..]), remainder)
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Params<'a>(Vec<&'a str>);
-
-impl<'a> Deref for Params<'a> {
-    type Target = Vec<&'a str>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+        let (start, end) = match (start, end) {
+            (Some(s), e) => (s, e),
+            _ => return (None, data),
+        };
+        let (channel, remainder) = data[start..].split_at(end);
+        (Some((&channel[1..]).into()), remainder)
     }
 }
 
-impl<'a> Params<'a> {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Params(UnsafeSlice);
+impl Params {
     /// Parse a params list
     ///
     /// Valid form: `[:]param0 [:]param1 [:]param2 [:]param3"
-    pub fn parse(data: &str) -> Params {
-        Params(
-            data.trim_start()
-                .split(' ')
-                .map(|p| p.strip_prefix(':').unwrap_or(p))
-                .filter(|p| !p.is_empty())
-                .collect(),
-        )
+    pub fn parse(data: &str) -> Option<Params> {
+        let data = data.trim_start();
+        if data.is_empty() {
+            None
+        } else {
+            Some(Params(data.into()))
+        }
+    }
+
+    pub(crate) fn raw_unsafe(&self) -> UnsafeSlice {
+        self.0
+    }
+
+    pub fn raw(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.0
+            .as_str()
+            .split(' ')
+            .map(|v| v.strip_prefix(":").unwrap_or(v))
+            .filter(|v| !v.is_empty())
     }
 }
 
@@ -461,7 +492,7 @@ mod tests {
             Prefix {
                 nick: None,
                 user: None,
-                host: "test.tmi.twitch.tv"
+                host: "test.tmi.twitch.tv".into()
             },
             Prefix::parse(":test.tmi.twitch.tv").unwrap().0
         );
@@ -472,9 +503,9 @@ mod tests {
         // :test@test.tmi.twitch.tv
         assert_eq!(
             Prefix {
-                nick: Some("test"),
+                nick: Some("test".into()),
                 user: None,
-                host: "test.tmi.twitch.tv"
+                host: "test.tmi.twitch.tv".into()
             },
             Prefix::parse(":test@test.tmi.twitch.tv").unwrap().0
         );
@@ -485,9 +516,9 @@ mod tests {
         // :test!test@test.tmi.twitch.tv
         assert_eq!(
             Prefix {
-                nick: Some("test"),
-                user: Some("test"),
-                host: "test.tmi.twitch.tv"
+                nick: Some("test".into()),
+                user: Some("test".into()),
+                host: "test.tmi.twitch.tv".into()
             },
             Prefix::parse(":test!test@test.tmi.twitch.tv").unwrap().0
         );
@@ -500,27 +531,27 @@ mod tests {
 
     #[test]
     fn parse_command() {
-        assert_eq!(Command::Privmsg, Command::parse("PRIVMSG").unwrap().0)
+        assert_eq!(Command::Privmsg, Command::parse("PRIVMSG").0)
     }
 
     // TODO: tests for parsing other message types
 
     #[test]
     fn parse_join() {
-        let src = ":test!test@test.tmi.twitch.tv JOIN #channel";
+        let src = ":test!test@test.tmi.twitch.tv JOIN #channel".to_string();
 
         assert_eq!(
             Message {
                 tags: Tags(HashMap::new()),
                 prefix: Prefix {
-                    nick: Some("test"),
-                    user: Some("test"),
-                    host: "test.tmi.twitch.tv"
+                    nick: Some("test".into()),
+                    user: Some("test".into()),
+                    host: "test.tmi.twitch.tv".into()
                 },
                 cmd: Command::Join,
-                channel: Some("channel"),
-                params: Params(vec![]),
-                source: src
+                channel: Some("channel".into()),
+                params: None,
+                source: Pin::new(src.clone())
             },
             Message::parse(src).unwrap()
         )
@@ -544,7 +575,8 @@ mod tests {
             user-id=29803735;\
             user-type= \
             :jun1orrrr!jun1orrrr@jun1orrrr.tmi.twitch.tv PRIVMSG #pajlada :dank cam\
-        ";
+        "
+        .to_string();
         assert_eq!(
             Message {
                 tags: Tags(
@@ -560,17 +592,18 @@ mod tests {
                         ("user-id", "29803735"),
                     ]
                     .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
                     .collect()
                 ),
                 prefix: Prefix {
-                    nick: Some("jun1orrrr"),
-                    user: Some("jun1orrrr"),
-                    host: "jun1orrrr.tmi.twitch.tv"
+                    nick: Some("jun1orrrr".into()),
+                    user: Some("jun1orrrr".into()),
+                    host: "jun1orrrr.tmi.twitch.tv".into()
                 },
                 cmd: Command::Privmsg,
-                channel: Some("pajlada"),
-                params: Params(vec!["dank", "cam"]),
-                source: src
+                channel: Some("pajlada".into()),
+                params: Some(Params(":dank cam".into())),
+                source: Pin::new(src.clone())
             },
             Message::parse(src).unwrap()
         );
@@ -582,7 +615,8 @@ mod tests {
         @badges=;color=#2E8B57;display-name=pajbot ;emotes=25:7-11;message-id=\
         2034;thread-id=40286300_82008718;turbo=0;user-id=82008718;user-type= \
         :pajbot!pajbot@pajbot.tmi.twitch.tv WHISPER randers :Riftey Kappa\
-        ";
+        "
+        .to_string();
         assert_eq!(
             Message {
                 tags: Tags(
@@ -596,17 +630,18 @@ mod tests {
                         ("display-name", "pajbot "),
                     ]
                     .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
                 prefix: Prefix {
-                    nick: Some("pajbot"),
-                    user: Some("pajbot"),
-                    host: "pajbot.tmi.twitch.tv",
+                    nick: Some("pajbot".into()),
+                    user: Some("pajbot".into()),
+                    host: "pajbot.tmi.twitch.tv".into(),
                 },
                 cmd: Command::Whisper,
                 channel: None,
-                params: Params(vec!["randers", "Riftey", "Kappa"]),
-                source: src,
+                params: Some(Params("randers :Riftey Kappa".into())),
+                source: Pin::new(src.clone()),
             },
             Message::parse(src).unwrap()
         );
@@ -618,7 +653,8 @@ mod tests {
         @badges=;color=#2E8B57;display-name=pajbot;emotes=25:7-11;message-id=\
         2034;thread-id=40286300_82008718;turbo=0;user-id=82008718;user-type= \
         :pajbot!pajbot@pajbot.tmi.twitch.tv WHISPER randers :\x01ACTION Riftey Kappa\x01\
-        ";
+        "
+        .to_string();
         assert_eq!(
             Message {
                 tags: Tags(
@@ -632,17 +668,18 @@ mod tests {
                         ("display-name", "pajbot"),
                     ]
                     .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
                 prefix: Prefix {
-                    nick: Some("pajbot"),
-                    user: Some("pajbot"),
-                    host: "pajbot.tmi.twitch.tv",
+                    nick: Some("pajbot".into()),
+                    user: Some("pajbot".into()),
+                    host: "pajbot.tmi.twitch.tv".into(),
                 },
                 cmd: Command::Whisper,
                 channel: None,
-                params: Params(vec!["randers", "\x01ACTION", "Riftey", "Kappa\x01"]),
-                source: src,
+                params: Some(Params("randers :\x01ACTION Riftey Kappa\x01".into())),
+                source: Pin::new(src.clone()),
             },
             Message::parse(src).unwrap()
         );
@@ -654,7 +691,8 @@ mod tests {
         @login=supibot;room-id=;target-msg-id=25fd76d9-4731-4907-978e-a391134ebd67;\
         tmi-sent-ts=-6795364578871 :tmi.twitch.tv CLEARMSG #randers :Pong! Uptime: 6h,\
         15m; Temperature: 54.8°C; Latency to TMI: 183ms; Commands used: 795\
-        ";
+        "
+        .to_string();
         assert_eq!(
             Message {
                 tags: Tags(
@@ -664,30 +702,20 @@ mod tests {
                         ("tmi-sent-ts", "-6795364578871")
                     ]
                     .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
                 prefix: Prefix {
                     nick: None,
                     user: None,
-                    host: "tmi.twitch.tv",
+                    host: "tmi.twitch.tv".into(),
                 },
                 cmd: Command::Clearmsg,
-                channel: Some("randers"),
-                params: Params(vec![
-                    "Pong!",
-                    "Uptime:",
-                    "6h,15m;",
-                    "Temperature:",
-                    "54.8°C;",
-                    "Latency",
-                    "to",
-                    "TMI:",
-                    "183ms;",
-                    "Commands",
-                    "used:",
-                    "795"
-                ]),
-                source: src,
+                channel: Some("randers".into()),
+                params: Some(Params(
+                    ":Pong! Uptime: 6h,15m; Temperature: 54.8°C; Latency to TMI: 183ms; Commands used: 795".into()
+                )),
+                source: Pin::new(src.clone()),
             },
             Message::parse(src).unwrap()
         )

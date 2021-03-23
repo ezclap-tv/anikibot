@@ -10,8 +10,7 @@
 
 #![feature(str_split_once)]
 
-pub use async_tungstenite as ws;
-
-pub mod conn;
+/* pub mod conn; */
 pub mod irc;
 pub mod tmi;
+pub(crate) mod util;

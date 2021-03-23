@@ -133,7 +133,7 @@ impl Twitch {
         if let Some(line) = read.next().await {
             let line = line?;
             println!("> {}", line);
-            match tmi::Message::parse(&line)? {
+            match tmi::Message::parse(line)? {
                 tmi::Message::Capability(capability) => {
                     if capability.which != expected_cap_ack(config.membership_data) {
                         return err!(Generic, "Did not receive expected capabilities");
