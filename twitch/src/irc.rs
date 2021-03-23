@@ -39,7 +39,8 @@ impl Message {
     /// the #<channel id> always being present
     /// before :params
     pub fn parse(source: String) -> Result<Message> {
-        let source = Pin::new(source);
+        let input = Pin::new(source);
+        let source = input.trim();
         let (tags, remainder) = Tags::parse(&source);
         let (prefix, remainder) = Prefix::parse(remainder)?;
         let (cmd, remainder) = Command::parse(remainder);
@@ -52,7 +53,7 @@ impl Message {
             cmd,
             channel,
             params,
-            source,
+            source: input,
         })
     }
 }
@@ -460,10 +461,6 @@ impl Params {
         } else {
             Some(Params(data.into()))
         }
-    }
-
-    pub(crate) fn raw_unsafe(&self) -> UnsafeSlice {
-        self.0
     }
 
     pub fn raw(&self) -> &str {

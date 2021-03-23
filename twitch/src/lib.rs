@@ -10,7 +10,7 @@
 
 #![feature(str_split_once)]
 
-/* pub mod conn; */
+pub mod conn;
 pub mod irc;
 pub mod tmi;
 pub(crate) mod util;

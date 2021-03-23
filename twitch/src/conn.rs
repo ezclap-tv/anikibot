@@ -9,12 +9,15 @@ use std::{sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use thiserror::Error;
-use tokio::{io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf, split}, net::TcpStream};
-use tokio_stream::wrappers::LinesStream;
+use tmi::write;
+use tokio::{
+    io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
+    net::TcpStream,
+};
 use tokio_rustls::client::TlsStream;
+use tokio_stream::wrappers::LinesStream;
 
 use crate::{irc, tmi};
-use tmi::write;
 
 const TMI_URL_HOST: &str = "irc.chat.twitch.tv";
 const TMI_TLS_PORT: u16 = 6697;
@@ -24,16 +27,11 @@ const TMI_TLS_PORT: u16 = 6697;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Login {
     Anonymous,
-    Regular {
-        login: String,
-        token: String,
-    }
+    Regular { login: String, token: String },
 }
 
 impl Default for Login {
-    fn default() -> Self {
-        Login::Anonymous
-    }
+    fn default() -> Self { Login::Anonymous }
 }
 
 #[derive(Clone, Default, Debug, PartialEq)]
@@ -65,15 +63,19 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 macro_rules! err {
-    ($Variant:ident, $msg:expr) => (Err(err!(bare $Variant, $msg)));
-    (bare $Variant:ident, $msg:expr) => (crate::conn::Error::$Variant(anyhow::anyhow!($msg)));
+    ($Variant:ident, $msg:expr) => {
+Err(err!(bare $Variant, $msg))
+    };
+    (bare $Variant:ident, $msg:expr) => {
+        crate::conn::Error::$Variant(anyhow::anyhow!($msg))
+    };
 }
 
-fn expected_cap_ack(request_membership_data: bool) -> &'static [&'static str] {
+fn expected_cap_ack(request_membership_data: bool) -> &'static str {
     if request_membership_data {
-        &["twitch.tv/commands", "twitch.tv/tags", "twitch.tv/membership"]
+        "twitch.tv/commands twitch.tv/tags twitch.tv/membership"
     } else {
-        &["twitch.tv/commands", "twitch.tv/tags"]
+        "twitch.tv/commands twitch.tv/tags"
     }
 }
 
@@ -84,8 +86,13 @@ async fn connect_tls(host: &str, port: u16) -> Result<TlsStream<TcpStream>> {
     config.root_store = rustls_native_certs::load_native_certs().expect("Failed to load native certs");
     let config = TlsConnector::from(Arc::new(config));
     let dnsname = DNSNameRef::try_from_ascii_str(host).map_err(|err| anyhow::anyhow!(err))?;
-    let stream = TcpStream::connect((host, port)).await.map_err(|err| anyhow::anyhow!(err))?;
-    let out = config.connect(dnsname, stream).await.map_err(|err| anyhow::anyhow!(err))?;
+    let stream = TcpStream::connect((host, port))
+        .await
+        .map_err(|err| anyhow::anyhow!(err))?;
+    let out = config
+        .connect(dnsname, stream)
+        .await
+        .map_err(|err| anyhow::anyhow!(err))?;
 
     Ok(out)
 }
@@ -117,13 +124,13 @@ pub struct Twitch;
 impl Twitch {
     pub async fn connect(config: Config) -> Result<(Receiver, Sender)> {
         // 1. connect
-        let connection: TlsStream<TcpStream> = tokio::time::timeout(
-            Duration::from_secs(5), 
-            connect_tls(TMI_URL_HOST, TMI_TLS_PORT)
-        ).await.or(Err(Error::Timeout))??;
+        let connection: TlsStream<TcpStream> =
+            tokio::time::timeout(Duration::from_secs(5), connect_tls(TMI_URL_HOST, TMI_TLS_PORT))
+                .await
+                .or(Err(Error::Timeout))??;
         let (read, mut write) = split(connection);
         let mut read = LinesStream::new(BufReader::new(read).lines());
-        
+
         // 2. request capabilities
         // < CAP REQ :twitch.tv/commands twitch.tv/tags [twitch.tv/membership]
         let req = write::cap(false);
@@ -135,10 +142,10 @@ impl Twitch {
             println!("> {}", line);
             match tmi::Message::parse(line)? {
                 tmi::Message::Capability(capability) => {
-                    if capability.which != expected_cap_ack(config.membership_data) {
+                    if capability.which() != expected_cap_ack(config.membership_data) {
                         return err!(Generic, "Did not receive expected capabilities");
                     }
-                },
+                }
                 _ => {
                     return err!(Generic, "Did not receive expected capabilities");
                 }
@@ -169,9 +176,9 @@ impl Twitch {
         if let Some(line) = read.next().await {
             let line = line?;
             println!("> {}", line.trim());
-            match tmi::Message::parse(line.trim())? {
+            match tmi::Message::parse(line)? {
                 tmi::Message::Unknown(msg) => {
-                    if msg.cmd != irc::Command::Unknown("001") {
+                    if msg.cmd != irc::Command::Unknown("001".into()) {
                         return err!(Generic, "Failed to authenticate");
                     }
                 }

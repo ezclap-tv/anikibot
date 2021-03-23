@@ -1,12 +1,3 @@
-use std::convert::Into;
-
-use chrono::{DateTime, Duration, Utc};
-use thiserror::Error;
-
-// TODO: every field which is not just `UnsafeSlice` can potentially be just `UnsafeSlice`,
-// with the parsing done on-demand by the user.
-// TODO: investigate preserving comments in the slice getter auto-impls.
-
 ///! Twitch IRC message parser
 ///!
 ///! This *only* handles parsing.
@@ -16,6 +7,12 @@ use thiserror::Error;
 ///!     Message::Privmsg(msg) => handle_privmsg(msg)
 ///! }
 ///! ```
+use std::convert::Into;
+
+use chrono::{DateTime, Duration, Utc};
+use thiserror::Error;
+
+// TODO: there are still a bunch of String allocations which can be removed
 use crate::{impl_unsafe_slice_getters, irc, irc::DurationKind, util::UnsafeSlice};
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
@@ -122,8 +119,7 @@ pub struct Join {
     nick: UnsafeSlice,
     raw: irc::Message,
 }
-
-impl_unsafe_slice_getters!(Join, channel, nick);
+impl_unsafe_slice_getters!(Join, none channel, none nick);
 
 impl Join {
     pub fn parse(value: irc::Message) -> Result<Self> {
@@ -144,8 +140,7 @@ pub struct Part {
     nick: UnsafeSlice,
     raw: irc::Message,
 }
-
-impl_unsafe_slice_getters!(Part, channel, nick);
+impl_unsafe_slice_getters!(Part, none channel, none nick);
 
 impl Part {
     pub fn parse(value: irc::Message) -> Result<Self> {
@@ -171,66 +166,41 @@ pub struct TwitchUser {
     login: UnsafeSlice,
     /// Refers to the user's 'display' name, which should be used in user-facing
     /// contexts.
-    name: String,
+    pub name: String,
     badge_info: Option<UnsafeSlice>,
     badges: Option<UnsafeSlice>,
 }
-
-impl_unsafe_slice_getters!(TwitchUser, id, login);
-impl TwitchUser {
-    #[inline]
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    #[inline]
-    pub fn badge_info(&self) -> Option<&str> {
-        match self.badge_info {
-            Some(v) => Some(v.as_str()),
-            None => None,
-        }
-    }
-    /// This produces the badge list on-demand, which causes a `Vec` allocation.
-    /// The output should be stored in a variable if it's used multiple times.
-    #[inline]
-    pub fn badges(&self) -> Vec<&str> {
-        match self.badges {
-            Some(v) => v.as_str().split(",").collect(),
-            None => Vec::new(),
-        }
-    }
-}
+impl_unsafe_slice_getters!(TwitchUser, none id, none login, opt badge_info, opt badges);
 
 /// If message starts with '\x01ACTION ' and ends with '\x01', then remove those
-fn parse_message(msg: UnsafeSlice) -> (&'static str, bool) {
-    let msg = msg.as_str();
-    match msg.strip_prefix("\x01ACTION ") {
-        Some(v) => match v.strip_suffix("\x01") {
-            Some(v) => (v, true),
-            None => (msg, false),
-        },
-        None => (msg, false),
-    }
+fn parse_message(msg: &str) -> (&str, bool) {
+    msg.strip_prefix("\x01ACTION ")
+        .and_then(|v| v.strip_suffix("\x01"))
+        .map(|v| (v, true))
+        .unwrap_or((msg, false))
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Privmsg {
-    pub channel: UnsafeSlice,
-    pub text: UnsafeSlice,
+    channel: UnsafeSlice,
+    text: UnsafeSlice,
     pub user: TwitchUser,
     pub is_action: bool,
     pub bits: Option<i64>,
-    pub color: Option<UnsafeSlice>,
-    pub emotes: Vec<UnsafeSlice>,
-    pub id: UnsafeSlice,
-    pub room_id: UnsafeSlice,
+    color: Option<UnsafeSlice>,
+    // TODO: these should be just UnsafeSlice with an on-demand Iterator impl
+    emotes: Vec<UnsafeSlice>,
+    id: UnsafeSlice,
+    room_id: UnsafeSlice,
     pub time: DateTime<Utc>,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Privmsg, none channel, none text, opt color, vec emotes, none id, none room_id);
 
 impl Privmsg {
     pub fn parse(source: irc::Message) -> Result<Self> {
-        let (text, is_action) = match source.params {
-            Some(v) => parse_message(v.raw_unsafe()),
+        let (text, is_action) = match source.params.as_ref() {
+            Some(v) => parse_message(v.raw().trim_start().strip_prefix(':').ok_or(Error::MalformedMessage)?),
             None => ("", false),
         };
         Ok(Privmsg {
@@ -257,16 +227,18 @@ impl Privmsg {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Whisper {
-    pub recipient: UnsafeSlice,
-    pub thread_id: UnsafeSlice,
+    recipient: UnsafeSlice,
+    thread_id: UnsafeSlice,
     pub user: TwitchUser,
-    pub text: UnsafeSlice,
+    text: UnsafeSlice,
     pub is_action: bool,
-    pub color: Option<UnsafeSlice>,
-    pub emotes: Vec<UnsafeSlice>,
-    pub id: UnsafeSlice,
-    pub raw: irc::Message,
+    color: Option<UnsafeSlice>,
+    // TODO: same as above
+    emotes: Vec<UnsafeSlice>,
+    id: UnsafeSlice,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Whisper, none recipient, none thread_id, none text, opt color, vec emotes, none id);
 
 impl Whisper {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -282,7 +254,7 @@ impl Whisper {
             Some(v) => v,
             None => return Err(Error::MalformedMessage),
         };
-        let (text, is_action) = parse_message(message.into());
+        let (text, is_action) = parse_message(message);
 
         Ok(Whisper {
             recipient: recipient.into(),
@@ -306,20 +278,22 @@ impl Whisper {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clearchat {
-    pub channel: UnsafeSlice,
+    channel: UnsafeSlice,
     /// None = clear the entire chat
-    pub target: Option<UnsafeSlice>,
-    pub target_id: Option<UnsafeSlice>,
+    target: Option<UnsafeSlice>,
+    target_id: Option<UnsafeSlice>,
     pub time: DateTime<Utc>,
     /// None = permanent ban
     pub duration: Option<Duration>,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Clearchat, none channel, opt target, opt target_id);
 
 impl Clearchat {
     pub fn parse(source: irc::Message) -> Result<Self> {
         let target = source
             .params
+            .as_ref()
             .map(|v| v.raw())
             .map(|v| v.trim_start().strip_prefix(":").unwrap_or(v))
             .map(|v| v.into());
@@ -342,13 +316,15 @@ pub struct Clearmsg {
     /// Deleted message text
     pub text: UnsafeSlice,
     pub target_msg_id: UnsafeSlice,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Clearmsg, none channel, none login, none text, none target_msg_id);
 
 impl Clearmsg {
     pub fn parse(source: irc::Message) -> Result<Self> {
         let text = match source
             .params
+            .as_ref()
             .map(|v| v.raw())
             .map(|v| v.trim_start().strip_prefix(':').unwrap_or(v))
         {
@@ -368,14 +344,15 @@ impl Clearmsg {
 /// Sent following a successful authentication
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlobalUserState {
-    pub user_id: UnsafeSlice,
+    user_id: UnsafeSlice,
     pub display_name: String,
-    pub badge_info: Option<UnsafeSlice>,
-    pub badges: Vec<UnsafeSlice>,
-    pub color: Option<UnsafeSlice>,
-    pub emote_sets: Vec<UnsafeSlice>,
-    pub raw: irc::Message,
+    badge_info: Option<UnsafeSlice>,
+    badges: Vec<UnsafeSlice>,
+    color: Option<UnsafeSlice>,
+    emote_sets: Vec<UnsafeSlice>,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(GlobalUserState, none user_id, opt badge_info, vec badges, opt color, vec emote_sets);
 
 impl GlobalUserState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -393,17 +370,19 @@ impl GlobalUserState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct HostTarget {
-    pub hosting_channel: UnsafeSlice,
+    hosting_channel: UnsafeSlice,
     /// None = stop hosting
-    pub target_channel: Option<UnsafeSlice>,
+    target_channel: Option<UnsafeSlice>,
     pub viewer_count: Option<i64>,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(HostTarget, none hosting_channel, opt target_channel);
 
 impl HostTarget {
     pub fn parse(source: irc::Message) -> Result<Self> {
         let (target_channel, viewer_count) = match source
             .params
+            .as_ref()
             .map(|v| v.raw())
             .map(|v| v.trim_start().strip_prefix(':').unwrap_or(v))
             .map(|v| match v.split_once(' ') {
@@ -928,21 +907,23 @@ impl NoticeId {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notice {
     pub id: Option<NoticeId>,
-    pub channel: Option<UnsafeSlice>,
-    pub message: UnsafeSlice,
-    pub raw: irc::Message,
+    channel: Option<UnsafeSlice>,
+    message: UnsafeSlice,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Notice, opt channel, none message);
 
 impl Notice {
     pub fn parse(source: irc::Message) -> Result<Self> {
-        // if id.is_some() => @msg-id=some_id :tmi.twitch.tv NOTICE #forsen :SOME_MESSAGE
-        // if id.is_none() => :tmi.twitch.tv NOTICE * :SOME_MESSAGE
-        //                in this case we skip this ^
+        // if id.is_some() => @msg-id=some_id :tmi.twitch.tv NOTICE #forsen
+        // :SOME_MESSAGE if id.is_none() => :tmi.twitch.tv NOTICE *
+        // :SOME_MESSAGE                in this case we skip this ^
         let (id, message) = match source.tags.get("msg-id") {
             Some(v) => (
                 Some(NoticeId::parse(v.as_ref())?),
                 source
                     .params
+                    .as_ref()
                     .map(|v| v.raw())
                     .map(|v| v.trim_start().strip_prefix(':').unwrap_or(v))
                     .map(|v| v.into())
@@ -952,6 +933,7 @@ impl Notice {
                 None,
                 source
                     .params
+                    .as_ref()
                     .map(|v| v.raw())
                     .map(|v| {
                         v.strip_prefix('*')
@@ -975,7 +957,7 @@ impl Notice {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reconnect {
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
 
 impl Reconnect {
@@ -1009,7 +991,7 @@ impl FollowerOnlyMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RoomState {
-    pub channel: UnsafeSlice,
+    channel: UnsafeSlice,
     /// Only Twitch emotes are allowed in chat
     pub emote_only: Option<bool>,
     /// See `FollowerOnlyMode` for more info
@@ -1030,8 +1012,9 @@ pub struct RoomState {
     /// If someone sets the room to a different state, this will be true,
     /// and only the changed state will be `Some`, rest will be `None`.
     pub is_update: bool,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(RoomState, none channel);
 
 impl RoomState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -1060,17 +1043,90 @@ impl RoomState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserNoticeBase {
-    pub channel: UnsafeSlice,
-    pub text: UnsafeSlice,
+    channel: UnsafeSlice,
+    text: Option<UnsafeSlice>,
     pub user: TwitchUser,
-    pub color: Option<UnsafeSlice>,
-    pub emotes: Vec<UnsafeSlice>,
-    pub id: UnsafeSlice,
-    pub room_id: UnsafeSlice,
+    color: Option<UnsafeSlice>,
+    emotes: Vec<UnsafeSlice>,
+    id: UnsafeSlice,
+    room_id: UnsafeSlice,
     pub system_msg: String,
     pub time: DateTime<Utc>,
-    pub raw: irc::Message,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(UserNoticeBase, none channel, opt text, opt color, vec emotes, none id, none room_id);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sub {
+    pub base: UserNoticeBase,
+    pub cumulative_months: i64,
+    pub should_share_streak: bool,
+    pub streak_months: i64,
+    sub_plan: UnsafeSlice,
+    pub sub_plan_name: String,
+    pub is_resub: bool,
+}
+impl_unsafe_slice_getters!(Sub, none sub_plan);
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubGift {
+    pub base: UserNoticeBase,
+    pub cumulative_months: i64,
+    pub recipient_display_name: String,
+    recipient_id: UnsafeSlice,
+    recipient_login: UnsafeSlice,
+    sub_plan: UnsafeSlice,
+    pub sub_plan_name: String,
+    pub gift_months: i64,
+    /// If the SubGift is anonymous, it means the sender
+    /// (UserNoticeBase.user) will be the channel owner
+    pub is_anon: bool,
+}
+impl_unsafe_slice_getters!(SubGift, none recipient_id, none recipient_login, none sub_plan);
+#[derive(Clone, Debug, PartialEq)]
+pub struct SubMysteryGift {
+    pub base: UserNoticeBase,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct GiftPaidUpgrade {
+    pub base: UserNoticeBase,
+    pub promo_gift_total: i64,
+    promo_name: UnsafeSlice,
+    sender_login: Option<UnsafeSlice>,
+    sender_name: Option<UnsafeSlice>,
+    pub is_anon: bool,
+}
+impl_unsafe_slice_getters!(GiftPaidUpgrade, none promo_name, opt sender_login, opt sender_name);
+#[derive(Clone, Debug, PartialEq)]
+pub struct RewardGift {
+    pub base: UserNoticeBase,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct Raid {
+    pub base: UserNoticeBase,
+    /// Display name of raid origin channel
+    pub source_display_name: String,
+    /// Login of raid origin channel
+    source_login: UnsafeSlice,
+    pub viewer_count: i64,
+}
+impl_unsafe_slice_getters!(Raid, none source_login);
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unraid {
+    pub base: UserNoticeBase,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ritual {
+    pub base: UserNoticeBase,
+    ritual_name: UnsafeSlice,
+}
+impl_unsafe_slice_getters!(Ritual, none ritual_name);
+#[derive(Clone, Debug, PartialEq)]
+pub struct BitsBadgeTier {
+    pub base: UserNoticeBase,
+    /// Tier of bits badge the user just earned
+    threshold: UnsafeSlice,
+}
+impl_unsafe_slice_getters!(BitsBadgeTier, none threshold);
 
 // TODO: finish implementing all the commands
 // TODO: write test (at least 2) for each command
@@ -1078,62 +1134,15 @@ pub struct UserNoticeBase {
 // some messages
 #[derive(Clone, Debug, PartialEq)]
 pub enum UserNotice {
-    Sub {
-        base: UserNoticeBase,
-        cumulative_months: i64,
-        should_share_streak: bool,
-        streak_months: i64,
-        sub_plan: UnsafeSlice,
-        sub_plan_name: String,
-        is_resub: bool,
-    },
-    SubGift {
-        base: UserNoticeBase,
-        cumulative_months: i64,
-        recipient_display_name: String,
-        recipient_id: UnsafeSlice,
-        recipient_login: UnsafeSlice,
-        sub_plan: UnsafeSlice,
-        sub_plan_name: String,
-        gift_months: i64,
-        /// If the SubGift is anonymous, it means the sender
-        /// (UserNoticeBase.user) will be the channel owner
-        is_anon: bool,
-    },
-    SubMysteryGift {
-        base: UserNoticeBase,
-    },
-    GiftPaidUpgrade {
-        base: UserNoticeBase,
-        promo_gift_total: i64,
-        promo_name: UnsafeSlice,
-        sender_login: Option<UnsafeSlice>,
-        sender_name: Option<UnsafeSlice>,
-        is_anon: bool,
-    },
-    RewardGift {
-        base: UserNoticeBase,
-    },
-    Raid {
-        base: UserNoticeBase,
-        /// Display name of raid origin channel
-        source_display_name: String,
-        /// Login of raid origin channel
-        source_login: UnsafeSlice,
-        viewer_count: i64,
-    },
-    Unraid {
-        base: UserNoticeBase,
-    },
-    Ritual {
-        base: UserNoticeBase,
-        ritual_name: UnsafeSlice,
-    },
-    BitsBadgeTier {
-        base: UserNoticeBase,
-        /// Tier of bits badge the user just earned
-        threshold: UnsafeSlice,
-    },
+    Sub(Sub),
+    SubGift(SubGift),
+    SubMysteryGift(SubMysteryGift),
+    GiftPaidUpgrade(GiftPaidUpgrade),
+    RewardGift(RewardGift),
+    Raid(Raid),
+    Unraid(Unraid),
+    Ritual(Ritual),
+    BitsBadgeTier(BitsBadgeTier),
 }
 
 impl UserNotice {
@@ -1141,7 +1150,12 @@ impl UserNotice {
         let base = |source: irc::Message| -> Result<UserNoticeBase> {
             Ok(UserNoticeBase {
                 channel: source.channel.ok_or_else(|| Error::MissingParam("channel".into()))?,
-                text: source.params.map(|v| v.raw().into()).ok_or(Error::MalformedMessage)?,
+                text: source
+                    .params
+                    .as_ref()
+                    .map(|v| v.raw())
+                    .map(|v| v.trim_start().strip_prefix(':').unwrap_or(v))
+                    .map(|v| v.into()),
                 user: TwitchUser {
                     id: source.tags.require("user-id")?,
                     login: source.tags.require("login")?,
@@ -1155,12 +1169,12 @@ impl UserNotice {
                 room_id: source.tags.require("room-id")?,
                 time: source.tags.require_date("tmi-sent-ts")?,
                 system_msg: source.tags.require_ns("system-msg")?,
-                raw: source.clone(),
+                raw: source,
             })
         };
 
         Ok(match source.tags.require("msg-id")?.as_ref() {
-            "sub" => UserNotice::Sub {
+            "sub" => UserNotice::Sub(Sub {
                 cumulative_months: source.tags.require_number("msg-param-cumulative-months")?,
                 should_share_streak: source.tags.get_bool("msg-param-should-share-streak").unwrap_or(false),
                 streak_months: source.tags.get_number("msg-param-streak-months").unwrap_or(0),
@@ -1168,8 +1182,8 @@ impl UserNotice {
                 sub_plan_name: source.tags.require_ns("msg-param-sub-plan-name")?,
                 is_resub: false,
                 base: base(source)?,
-            },
-            "resub" => UserNotice::Sub {
+            }),
+            "resub" => UserNotice::Sub(Sub {
                 cumulative_months: source.tags.require_number("msg-param-cumulative-months")?,
                 should_share_streak: source.tags.get_bool("msg-param-should-share-streak").unwrap_or(false),
                 streak_months: source.tags.get_number("msg-param-streak-months").unwrap_or(0),
@@ -1177,8 +1191,8 @@ impl UserNotice {
                 sub_plan_name: source.tags.require_ns("msg-param-sub-plan-name")?,
                 is_resub: true,
                 base: base(source)?,
-            },
-            "subgift" => UserNotice::SubGift {
+            }),
+            "subgift" => UserNotice::SubGift(SubGift {
                 cumulative_months: source.tags.require_number("msg-param-months")?,
                 recipient_display_name: source.tags.require_ns("msg-param-recipient-display-name")?,
                 recipient_id: source.tags.require("msg-param-recipient-id")?,
@@ -1188,8 +1202,8 @@ impl UserNotice {
                 gift_months: source.tags.get_number("msg-param-gift-months").unwrap_or(1),
                 is_anon: false,
                 base: base(source)?,
-            },
-            "anonsubgift" => UserNotice::SubGift {
+            }),
+            "anonsubgift" => UserNotice::SubGift(SubGift {
                 cumulative_months: source.tags.require_number("msg-param-months")?,
                 recipient_display_name: source.tags.require_ns("msg-param-recipient-display-name")?,
                 recipient_id: source.tags.require("msg-param-recipient-id")?,
@@ -1199,40 +1213,40 @@ impl UserNotice {
                 gift_months: source.tags.get_number("msg-param-gift-months").unwrap_or(1),
                 is_anon: true,
                 base: base(source)?,
-            },
-            "submysterygift" => UserNotice::SubMysteryGift { base: base(source)? },
-            "giftpaidupgrade" => UserNotice::GiftPaidUpgrade {
+            }),
+            "submysterygift" => UserNotice::SubMysteryGift(SubMysteryGift { base: base(source)? }),
+            "giftpaidupgrade" => UserNotice::GiftPaidUpgrade(GiftPaidUpgrade {
                 promo_gift_total: source.tags.require_number("msg-param-promo-gift-total")?,
                 promo_name: source.tags.require("msg-param-promo-name")?,
                 sender_login: source.tags.get("msg-param-sender-login"),
                 sender_name: source.tags.get("msg-param-sender-name"),
                 is_anon: false,
                 base: base(source)?,
-            },
-            "anongiftpaidupgrade" => UserNotice::GiftPaidUpgrade {
+            }),
+            "anongiftpaidupgrade" => UserNotice::GiftPaidUpgrade(GiftPaidUpgrade {
                 promo_gift_total: source.tags.require_number("msg-param-promo-gift-total")?,
                 promo_name: source.tags.require("msg-param-promo-name")?,
                 sender_login: source.tags.get("msg-param-sender-login"),
                 sender_name: source.tags.get("msg-param-sender-name"),
                 is_anon: true,
                 base: base(source)?,
-            },
-            "rewardgift" => UserNotice::RewardGift { base: base(source)? },
-            "raid" => UserNotice::Raid {
+            }),
+            "rewardgift" => UserNotice::RewardGift(RewardGift { base: base(source)? }),
+            "raid" => UserNotice::Raid(Raid {
                 source_display_name: source.tags.require_ns("msg-param-displayName")?,
                 source_login: source.tags.require("msg-param-login")?,
                 viewer_count: source.tags.require_number("msg-param-viewerCount")?,
                 base: base(source)?,
-            },
-            "unraid" => UserNotice::Unraid { base: base(source)? },
-            "ritual" => UserNotice::Ritual {
+            }),
+            "unraid" => UserNotice::Unraid(Unraid { base: base(source)? }),
+            "ritual" => UserNotice::Ritual(Ritual {
                 ritual_name: source.tags.require("msg-param-ritual-name")?,
                 base: base(source)?,
-            },
-            "bitsbadgetier" => UserNotice::BitsBadgeTier {
+            }),
+            "bitsbadgetier" => UserNotice::BitsBadgeTier(BitsBadgeTier {
                 threshold: source.tags.require("msg-param-threshold")?,
                 base: base(source)?,
-            },
+            }),
             invalid => return Err(Error::InvalidTagValue("msg-id".into(), invalid.into())),
         })
     }
@@ -1240,14 +1254,15 @@ impl UserNotice {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserState {
-    pub channel: UnsafeSlice,
+    channel: UnsafeSlice,
     pub display_name: String,
-    pub badge_info: Option<UnsafeSlice>,
-    pub badges: Vec<UnsafeSlice>,
-    pub color: Option<UnsafeSlice>,
-    pub emote_sets: Vec<UnsafeSlice>,
-    pub raw: irc::Message,
+    badge_info: Option<UnsafeSlice>,
+    badges: Vec<UnsafeSlice>,
+    color: Option<UnsafeSlice>,
+    emote_sets: Vec<UnsafeSlice>,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(UserState, none channel, opt badge_info, vec badges, opt color, vec emote_sets);
 
 impl UserState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -1285,34 +1300,13 @@ impl CapabilitySubCmd {
     }
 }
 
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub enum CapabilityKind {
-    None = 0,
-    Commands = 1 << 0,
-    Tags = 1 << 1,
-    Membership = 1 << 2,
-}
-
-impl CapabilityKind {
-    pub fn parse(which: &str) -> u8 {
-        which.split(' ').fold(0, |acc, kind| {
-            acc | (match kind {
-                "twitch.tv/commands" => CapabilityKind::Commands,
-                "twitch.tv/tags" => CapabilityKind::Tags,
-                "twitch.tv/membership" => CapabilityKind::Membership,
-                _ => CapabilityKind::None,
-            } as u8)
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Capability {
     pub subcmd: CapabilitySubCmd,
-    pub which: u8,
-    pub raw: irc::Message,
+    which: UnsafeSlice,
+    raw: irc::Message,
 }
+impl_unsafe_slice_getters!(Capability, none which);
 
 impl Capability {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -1326,7 +1320,7 @@ impl Capability {
         let (subcmd, which) = match params.split_once(' ') {
             Some((s, w)) => (
                 CapabilitySubCmd::parse(s).ok_or(Error::MalformedMessage)?,
-                CapabilityKind::parse(w),
+                w.trim_start().strip_prefix(':').ok_or(Error::MalformedMessage)?.into(),
             ),
             None => return Err(Error::MalformedMessage),
         };
@@ -1796,10 +1790,10 @@ mod tests {
         let msg = irc::Message::parse(src).unwrap();
 
         assert_eq!(
-            Message::UserNotice(UserNotice::Sub {
+            Message::UserNotice(UserNotice::Sub(Sub {
                 base: UserNoticeBase {
                     channel: "dallas".into(),
-                    text: "Great stream -- keep it up!".into(),
+                    text: Some("Great stream -- keep it up!".into()),
                     user: TwitchUser {
                         id: "1337".into(),
                         login: "ronni".into(),
@@ -1821,7 +1815,7 @@ mod tests {
                 sub_plan: "Prime".into(),
                 sub_plan_name: "Prime".into(),
                 is_resub: true,
-            }),
+            })),
             Message::parse_irc(msg).unwrap()
         )
     }
@@ -1843,10 +1837,10 @@ mod tests {
         let msg = irc::Message::parse(src).unwrap();
 
         assert_eq!(
-            Message::UserNotice(UserNotice::SubGift {
+            Message::UserNotice(UserNotice::SubGift(SubGift {
                 base: UserNoticeBase {
                     channel: "forstycup".into(),
-                    text: "".into(),
+                    text: None,
                     user: TwitchUser {
                         id: "13405587".into(),
                         login: "tww2".into(),
@@ -1870,7 +1864,7 @@ mod tests {
                 sub_plan_name: "House of Nyoro~n".into(),
                 gift_months: 1,
                 is_anon: false,
-            }),
+            })),
             Message::parse_irc(msg).unwrap()
         )
     }
@@ -1918,7 +1912,7 @@ mod tests {
         assert_eq!(
             Message::Capability(Capability {
                 subcmd: CapabilitySubCmd::ACK,
-                which: vec!["twitch.tv/commands".into()],
+                which: "twitch.tv/commands".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1933,11 +1927,7 @@ mod tests {
         assert_eq!(
             Message::Capability(Capability {
                 subcmd: CapabilitySubCmd::ACK,
-                which: vec![
-                    "twitch.tv/commands".into(),
-                    "twitch.tv/tags".into(),
-                    "twitch.tv/membership".into()
-                ],
+                which: "twitch.tv/commands twitch.tv/tags twitch.tv/membership".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1952,7 +1942,7 @@ mod tests {
         assert_eq!(
             Message::Capability(Capability {
                 subcmd: CapabilitySubCmd::NAK,
-                which: vec!["twitch.tv/invalid".into()],
+                which: "twitch.tv/invalid".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1967,11 +1957,7 @@ mod tests {
         assert_eq!(
             Message::Capability(Capability {
                 subcmd: CapabilitySubCmd::NAK,
-                which: vec![
-                    "twitch.tv/invalid0".into(),
-                    "twitch.tv/invalid1".into(),
-                    "twitch.tv/invalid2".into()
-                ],
+                which: "twitch.tv/invalid0 twitch.tv/invalid1 twitch.tv/invalid2".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1986,11 +1972,7 @@ mod tests {
         assert_eq!(
             Message::Capability(Capability {
                 subcmd: CapabilitySubCmd::LS,
-                which: vec![
-                    "twitch.tv/commands".into(),
-                    "twitch.tv/tags".into(),
-                    "twitch.tv/membership".into()
-                ],
+                which: "twitch.tv/commands twitch.tv/tags twitch.tv/membership".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
