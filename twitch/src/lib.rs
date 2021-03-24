@@ -7,6 +7,7 @@
 //! * [`client`](./client) - high-level Twitch chat client which encapsulates
 //!   the complexity of maintaining a connection to Twitch, and
 //!   receiving/sending messages
+#![feature(str_split_once)]
 
 pub mod conn;
 pub mod irc;

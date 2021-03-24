@@ -7,6 +7,8 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+// TODO: #[exclude] attribute (?)
+
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use syn::{spanned::Spanned, ItemStruct};
@@ -107,25 +109,22 @@ pub fn twitch_getters(_metadata: TokenStream, input: TokenStream) -> TokenStream
 fn collect_unsafe_slice_fields(i: &ItemStruct, type_name: &str) -> Vec<(String, GetterType)> {
     let mut getters = vec![];
 
-    match &i.fields {
-        syn::Fields::Named(fields) => {
-            fields
-                .named
-                .iter()
-                .filter(|field| field.ident.is_some())
-                .for_each(|field| {
-                    match field.ty {
-                        // The guard is for skipping self-qualified types like <Vec<T>>::Iter
-                        syn::Type::Path(ref path) if path.qself.is_none() => {
-                            if let Some(ty) = determine_getter_type(&path.path, type_name) {
-                                getters.push((field.ident.as_ref().unwrap().to_string(), ty));
-                            }
+    if let syn::Fields::Named(fields) = &i.fields {
+        fields
+            .named
+            .iter()
+            .filter(|field| field.ident.is_some())
+            .for_each(|field| {
+                match field.ty {
+                    // The guard is for skipping self-qualified types like <Vec<T>>::Iter
+                    syn::Type::Path(ref path) if path.qself.is_none() => {
+                        if let Some(ty) = determine_getter_type(&path.path, type_name) {
+                            getters.push((field.ident.as_ref().unwrap().to_string(), ty));
                         }
-                        _ => {}
                     }
-                })
-        }
-        _ => (),
+                    _ => {}
+                }
+            })
     }
 
     getters
@@ -151,8 +150,8 @@ fn determine_getter_type(path: &syn::Path, type_name: &str) -> Option<GetterType
             syn::PathArguments::Parenthesized(_) => None,
             syn::PathArguments::AngleBracketed(generics) => {
                 let generics = generics.args.iter().collect::<Vec<_>>();
-                match &generics[..] {
-                    &[syn::GenericArgument::Type(syn::Type::Path(ty))]
+                match generics[..] {
+                    [syn::GenericArgument::Type(syn::Type::Path(ty))]
                         if ty
                             .path
                             .segments
