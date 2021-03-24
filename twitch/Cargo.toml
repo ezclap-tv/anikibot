@@ -4,6 +4,7 @@ version = "0.0.1"
 authors = ["jprochazk <honza.spacir@gmail.com>"]
 edition = "2018"
 
+
 [dependencies]
 thiserror = "1.0.23"
 chrono = "0.4.19"
@@ -21,6 +22,7 @@ async-tungstenite = { version = "0.13.0", features = ["tokio-runtime", "tokio-na
 rand = "0.8.3"
 lazy_static = "1.4.0"
 unicode-segmentation = "1.7.1"
+twitch_getters = { path = "./twitch_getters" }
 
 [dev-dependencies]
 tokio-test = "0.4.0"

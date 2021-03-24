@@ -11,9 +11,10 @@ use std::convert::Into;
 
 use chrono::{DateTime, Duration, Utc};
 use thiserror::Error;
+use twitch_getters::twitch_getters;
 
 // TODO: there are still a bunch of String allocations which can be removed
-use crate::{impl_unsafe_slice_getters, irc, irc::DurationKind, util::UnsafeSlice};
+use crate::{irc, irc::DurationKind, util::UnsafeSlice};
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
     #[error("Invalid tag '{0}'")]
@@ -97,9 +98,7 @@ pub struct Ping {
 }
 
 impl Ping {
-    pub fn parse(value: irc::Message) -> Result<Ping> {
-        Ok(Ping { raw: value })
-    }
+    pub fn parse(value: irc::Message) -> Result<Ping> { Ok(Ping { raw: value }) }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -108,18 +107,16 @@ pub struct Pong {
 }
 
 impl Pong {
-    pub fn parse(value: irc::Message) -> Result<Pong> {
-        Ok(Pong { raw: value })
-    }
+    pub fn parse(value: irc::Message) -> Result<Pong> { Ok(Pong { raw: value }) }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Join {
     channel: UnsafeSlice,
     nick: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Join, none channel, none nick);
 
 impl Join {
     pub fn parse(value: irc::Message) -> Result<Self> {
@@ -134,13 +131,13 @@ impl Join {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Part {
     channel: UnsafeSlice,
     nick: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Part, none channel, none nick);
 
 impl Part {
     pub fn parse(value: irc::Message) -> Result<Self> {
@@ -155,6 +152,7 @@ impl Part {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct TwitchUser {
     /// The unique ID of the user - the `login` and `name` fields may
@@ -170,7 +168,6 @@ pub struct TwitchUser {
     badge_info: Option<UnsafeSlice>,
     badges: Option<UnsafeSlice>,
 }
-impl_unsafe_slice_getters!(TwitchUser, none id, none login, opt badge_info, opt badges);
 
 /// If message starts with '\x01ACTION ' and ends with '\x01', then remove those
 fn parse_message(msg: &str) -> (&str, bool) {
@@ -180,6 +177,7 @@ fn parse_message(msg: &str) -> (&str, bool) {
         .unwrap_or((msg, false))
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Privmsg {
     channel: UnsafeSlice,
@@ -195,7 +193,6 @@ pub struct Privmsg {
     pub time: DateTime<Utc>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Privmsg, none channel, none text, opt color, vec emotes, none id, none room_id);
 
 impl Privmsg {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -225,6 +222,7 @@ impl Privmsg {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Whisper {
     recipient: UnsafeSlice,
@@ -238,7 +236,6 @@ pub struct Whisper {
     id: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Whisper, none recipient, none thread_id, none text, opt color, vec emotes, none id);
 
 impl Whisper {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -276,6 +273,7 @@ impl Whisper {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clearchat {
     channel: UnsafeSlice,
@@ -287,7 +285,6 @@ pub struct Clearchat {
     pub duration: Option<Duration>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Clearchat, none channel, opt target, opt target_id);
 
 impl Clearchat {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -309,6 +306,7 @@ impl Clearchat {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clearmsg {
     pub channel: UnsafeSlice,
@@ -318,7 +316,6 @@ pub struct Clearmsg {
     pub target_msg_id: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Clearmsg, none channel, none login, none text, none target_msg_id);
 
 impl Clearmsg {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -342,6 +339,7 @@ impl Clearmsg {
 }
 
 /// Sent following a successful authentication
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlobalUserState {
     user_id: UnsafeSlice,
@@ -352,7 +350,6 @@ pub struct GlobalUserState {
     emote_sets: Vec<UnsafeSlice>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(GlobalUserState, none user_id, opt badge_info, vec badges, opt color, vec emote_sets);
 
 impl GlobalUserState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -368,6 +365,7 @@ impl GlobalUserState {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct HostTarget {
     hosting_channel: UnsafeSlice,
@@ -376,7 +374,6 @@ pub struct HostTarget {
     pub viewer_count: Option<i64>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(HostTarget, none hosting_channel, opt target_channel);
 
 impl HostTarget {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -904,6 +901,7 @@ impl NoticeId {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Notice {
     pub id: Option<NoticeId>,
@@ -911,7 +909,6 @@ pub struct Notice {
     message: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Notice, opt channel, none message);
 
 impl Notice {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -961,9 +958,7 @@ pub struct Reconnect {
 }
 
 impl Reconnect {
-    pub fn parse(source: irc::Message) -> Result<Self> {
-        Ok(Reconnect { raw: source })
-    }
+    pub fn parse(source: irc::Message) -> Result<Self> { Ok(Reconnect { raw: source }) }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -989,6 +984,7 @@ impl FollowerOnlyMode {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct RoomState {
     channel: UnsafeSlice,
@@ -1014,7 +1010,6 @@ pub struct RoomState {
     pub is_update: bool,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(RoomState, none channel);
 
 impl RoomState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -1041,6 +1036,7 @@ impl RoomState {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserNoticeBase {
     channel: UnsafeSlice,
@@ -1054,8 +1050,8 @@ pub struct UserNoticeBase {
     pub time: DateTime<Utc>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(UserNoticeBase, none channel, opt text, opt color, vec emotes, none id, none room_id);
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sub {
     pub base: UserNoticeBase,
@@ -1066,7 +1062,8 @@ pub struct Sub {
     pub sub_plan_name: String,
     pub is_resub: bool,
 }
-impl_unsafe_slice_getters!(Sub, none sub_plan);
+
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct SubGift {
     pub base: UserNoticeBase,
@@ -1081,11 +1078,13 @@ pub struct SubGift {
     /// (UserNoticeBase.user) will be the channel owner
     pub is_anon: bool,
 }
-impl_unsafe_slice_getters!(SubGift, none recipient_id, none recipient_login, none sub_plan);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct SubMysteryGift {
     pub base: UserNoticeBase,
 }
+
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct GiftPaidUpgrade {
     pub base: UserNoticeBase,
@@ -1095,11 +1094,13 @@ pub struct GiftPaidUpgrade {
     sender_name: Option<UnsafeSlice>,
     pub is_anon: bool,
 }
-impl_unsafe_slice_getters!(GiftPaidUpgrade, none promo_name, opt sender_login, opt sender_name);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RewardGift {
     pub base: UserNoticeBase,
 }
+
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Raid {
     pub base: UserNoticeBase,
@@ -1109,24 +1110,26 @@ pub struct Raid {
     source_login: UnsafeSlice,
     pub viewer_count: i64,
 }
-impl_unsafe_slice_getters!(Raid, none source_login);
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Unraid {
     pub base: UserNoticeBase,
 }
+
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ritual {
     pub base: UserNoticeBase,
     ritual_name: UnsafeSlice,
 }
-impl_unsafe_slice_getters!(Ritual, none ritual_name);
+
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct BitsBadgeTier {
     pub base: UserNoticeBase,
     /// Tier of bits badge the user just earned
     threshold: UnsafeSlice,
 }
-impl_unsafe_slice_getters!(BitsBadgeTier, none threshold);
 
 // TODO: finish implementing all the commands
 // TODO: write test (at least 2) for each command
@@ -1252,6 +1255,7 @@ impl UserNotice {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct UserState {
     channel: UnsafeSlice,
@@ -1262,7 +1266,6 @@ pub struct UserState {
     emote_sets: Vec<UnsafeSlice>,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(UserState, none channel, opt badge_info, vec badges, opt color, vec emote_sets);
 
 impl UserState {
     pub fn parse(source: irc::Message) -> Result<Self> {
@@ -1300,13 +1303,13 @@ impl CapabilitySubCmd {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Capability {
     pub subcmd: CapabilitySubCmd,
     which: UnsafeSlice,
     raw: irc::Message,
 }
-impl_unsafe_slice_getters!(Capability, none which);
 
 impl Capability {
     pub fn parse(source: irc::Message) -> Result<Self> {
