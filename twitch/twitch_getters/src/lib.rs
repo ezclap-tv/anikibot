@@ -15,9 +15,10 @@ use syn::{spanned::Spanned, ItemStruct};
 
 const UNSAFE_SLICE_TYPE_NAME: &str = "UnsafeSlice";
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum GetterType {
     Bare,
+    Csv,
     Option,
     Vec,
 }
@@ -36,6 +37,8 @@ enum GetterType {
 ///     nick: UnsafeSlice,
 ///     sub: Option<UnsafeSlice>,
 ///     badges: Vec<UnsafeSlice>,
+///     #[csv]
+///     comma_sep_field: UnsafeSlice,  
 ///     // Any other fields
 ///     some_other_vec: Vec<i32>,
 ///     some_option: Option<String>
@@ -55,13 +58,17 @@ enum GetterType {
 ///     pub fn badges(&self) -> impl Iterator<Item = &str> + '_ {
 ///         self.badges.iter().map(|v| v.as_str())
 ///     }
+///     #[inline]
+///     pub fn comma_sep_field(&self) -> std::str::Split<'_> {
+///         self.comma_sep_field.as_ref().split(',')
+///     }
 /// }
 /// ```
 #[proc_macro_attribute]
 pub fn twitch_getters(_metadata: TokenStream, input: TokenStream) -> TokenStream {
-    let item: syn::Item = syn::parse(input).expect("This macro can only be used with structs.");
+    let mut item: syn::Item = syn::parse(input).expect("This macro can only be used with structs.");
 
-    let (name, fields) = match &item {
+    let (name, fields) = match &mut item {
         syn::Item::Struct(i) => (i.ident.clone(), collect_unsafe_slice_fields(i, UNSAFE_SLICE_TYPE_NAME)),
         _ => {
             item.span()
@@ -79,6 +86,12 @@ pub fn twitch_getters(_metadata: TokenStream, input: TokenStream) -> TokenStream
                 #[inline]
                 pub fn #name(&self) -> &str {
                     self.#name.as_str()
+                }
+            }),
+            GetterType::Csv => getters.push(quote! {
+                #[inline]
+                pub fn #name(&self) -> std::str::Split<'_, char> {
+                    self.#name.as_str().split(',')
                 }
             }),
             GetterType::Option => getters.push(quote! {
@@ -106,19 +119,27 @@ pub fn twitch_getters(_metadata: TokenStream, input: TokenStream) -> TokenStream
     output.into()
 }
 
-fn collect_unsafe_slice_fields(i: &ItemStruct, type_name: &str) -> Vec<(String, GetterType)> {
+fn collect_unsafe_slice_fields(i: &mut ItemStruct, type_name: &str) -> Vec<(String, GetterType)> {
     let mut getters = vec![];
 
-    if let syn::Fields::Named(fields) = &i.fields {
+    if let syn::Fields::Named(fields) = &mut i.fields {
         fields
             .named
-            .iter()
+            .iter_mut()
             .filter(|field| field.ident.is_some())
             .for_each(|field| {
+                let has_csv_attribute = match field.attrs.first() {
+                    Some(attr) => attr.path.is_ident("csv"),
+                    None => false,
+                };
                 match field.ty {
                     // The guard is for skipping self-qualified types like <Vec<T>>::Iter
                     syn::Type::Path(ref path) if path.qself.is_none() => {
-                        if let Some(ty) = determine_getter_type(&path.path, type_name) {
+                        if let Some(mut ty) = determine_getter_type(&path.path, type_name) {
+                            if has_csv_attribute && ty == GetterType::Bare {
+                                strip_csv_attribute(field);
+                                ty = GetterType::Csv;
+                            }
                             getters.push((field.ident.as_ref().unwrap().to_string(), ty));
                         }
                     }
@@ -128,6 +149,14 @@ fn collect_unsafe_slice_fields(i: &ItemStruct, type_name: &str) -> Vec<(String, 
     }
 
     getters
+}
+
+fn strip_csv_attribute(field: &mut syn::Field) {
+    if field.attrs.len() != 1 {
+        field.span().unstable().error("A field must have only one attribute.");
+        return;
+    }
+    field.attrs.pop();
 }
 
 fn determine_getter_type(path: &syn::Path, type_name: &str) -> Option<GetterType> {
