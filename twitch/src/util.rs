@@ -45,6 +45,9 @@ impl PartialEq<UnsafeSlice> for UnsafeSlice {
 impl Hash for UnsafeSlice {
     fn hash<H: Hasher>(&self, state: &mut H) { (AsRef::<str>::as_ref(self)).hash(state) }
 }
+impl Default for UnsafeSlice {
+    fn default() -> Self { "".into() }
+}
 
 #[cfg(test)]
 mod tests {
@@ -53,7 +56,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hash_map() {
+    fn unsafeslice_usable_in_hash_map() {
         let data = "Hello".to_string();
         let slice: UnsafeSlice = (&data[..]).into();
 

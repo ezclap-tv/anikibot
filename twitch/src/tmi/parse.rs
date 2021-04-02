@@ -92,22 +92,46 @@ impl Message {
     }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ping {
+    arg: Option<UnsafeSlice>,
     raw: irc::Message,
 }
 
 impl Ping {
-    pub fn parse(value: irc::Message) -> Result<Ping> { Ok(Ping { raw: value }) }
+    pub fn parse(value: irc::Message) -> Result<Ping> {
+        Ok(Ping {
+            arg: value
+                .params
+                .as_ref()
+                .map(|v| v.raw().strip_prefix(":"))
+                .flatten()
+                .map(|v| v.into()),
+            raw: value,
+        })
+    }
 }
 
+#[twitch_getters]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pong {
+    arg: Option<UnsafeSlice>,
     raw: irc::Message,
 }
 
 impl Pong {
-    pub fn parse(value: irc::Message) -> Result<Pong> { Ok(Pong { raw: value }) }
+    pub fn parse(value: irc::Message) -> Result<Pong> {
+        Ok(Pong {
+            arg: value
+                .params
+                .as_ref()
+                .map(|v| v.raw().strip_prefix(":"))
+                .flatten()
+                .map(|v| v.into()),
+            raw: value,
+        })
+    }
 }
 
 #[twitch_getters]
@@ -122,7 +146,7 @@ impl Join {
     pub fn parse(value: irc::Message) -> Result<Self> {
         Ok(Join {
             channel: value.channel.ok_or_else(|| Error::MissingParam("channel".into()))?,
-            nick: match value.prefix.nick {
+            nick: match value.prefix.ok_or_else(|| Error::MissingParam("nick".into()))?.nick {
                 Some(nick) => nick,
                 None => return Err(Error::MissingParam("user".into())),
             },
@@ -143,7 +167,7 @@ impl Part {
     pub fn parse(value: irc::Message) -> Result<Self> {
         Ok(Part {
             channel: value.channel.ok_or_else(|| Error::MissingParam("channel".into()))?,
-            nick: match value.prefix.nick {
+            nick: match value.prefix.ok_or_else(|| Error::MissingParam("nick".into()))?.nick {
                 Some(nick) => nick,
                 None => return Err(Error::MissingParam("nick".into())),
             },
@@ -186,8 +210,8 @@ pub struct Privmsg {
     pub is_action: bool,
     pub bits: Option<i64>,
     color: Option<UnsafeSlice>,
-    // TODO: these should be just UnsafeSlice with an on-demand Iterator impl
-    emotes: Vec<UnsafeSlice>,
+    #[csv]
+    emotes: UnsafeSlice,
     id: UnsafeSlice,
     room_id: UnsafeSlice,
     pub time: DateTime<Utc>,
@@ -205,7 +229,11 @@ impl Privmsg {
             text: text.into(),
             user: TwitchUser {
                 id: source.tags.require("user-id")?,
-                login: source.prefix.nick.ok_or_else(|| Error::MissingParam("nick".into()))?,
+                login: source
+                    .prefix
+                    .ok_or_else(|| Error::MissingParam("nick".into()))?
+                    .nick
+                    .ok_or_else(|| Error::MissingParam("nick".into()))?,
                 name: source.tags.require_ns("display-name")?,
                 badge_info: source.tags.get("badge-info"),
                 badges: source.tags.get("badges"),
@@ -213,7 +241,7 @@ impl Privmsg {
             is_action,
             bits: source.tags.get_number("bits"),
             color: source.tags.get("color"),
-            emotes: source.tags.get_csv("emotes").unwrap_or_default(),
+            emotes: source.tags.get("emotes").unwrap_or_default(),
             id: source.tags.require("id")?,
             room_id: source.tags.require("room-id")?,
             time: source.tags.require_date("tmi-sent-ts")?,
@@ -231,8 +259,8 @@ pub struct Whisper {
     text: UnsafeSlice,
     pub is_action: bool,
     color: Option<UnsafeSlice>,
-    // TODO: same as above
-    emotes: Vec<UnsafeSlice>,
+    #[csv]
+    emotes: UnsafeSlice,
     id: UnsafeSlice,
     raw: irc::Message,
 }
@@ -258,7 +286,11 @@ impl Whisper {
             thread_id: source.tags.require("thread-id")?,
             user: TwitchUser {
                 id: source.tags.require("user-id")?,
-                login: source.prefix.nick.ok_or_else(|| Error::MissingParam("nick".into()))?,
+                login: source
+                    .prefix
+                    .ok_or_else(|| Error::MissingParam("nick".into()))?
+                    .nick
+                    .ok_or_else(|| Error::MissingParam("nick".into()))?,
                 name: source.tags.require_ns("display-name")?,
                 badge_info: source.tags.get("badge-info"),
                 badges: source.tags.get("badges"),
@@ -266,7 +298,7 @@ impl Whisper {
             text: text.into(),
             is_action,
             color: source.tags.get("color"),
-            emotes: source.tags.get_csv("emotes").unwrap_or_default(),
+            emotes: source.tags.get("emotes").unwrap_or_default(),
             id: source.tags.require("message-id")?,
             raw: source,
         })
@@ -345,9 +377,11 @@ pub struct GlobalUserState {
     user_id: UnsafeSlice,
     pub display_name: String,
     badge_info: Option<UnsafeSlice>,
-    badges: Vec<UnsafeSlice>,
+    #[csv]
+    badges: UnsafeSlice,
     color: Option<UnsafeSlice>,
-    emote_sets: Vec<UnsafeSlice>,
+    #[csv]
+    emote_sets: UnsafeSlice,
     raw: irc::Message,
 }
 
@@ -357,9 +391,9 @@ impl GlobalUserState {
             user_id: source.tags.require("user-id")?,
             display_name: source.tags.require_ns("display-name")?,
             badge_info: source.tags.get("badge-info"),
-            badges: source.tags.get_csv("badges").unwrap_or_default(),
+            badges: source.tags.get("badges").unwrap_or_default(),
             color: source.tags.get("color"),
-            emote_sets: source.tags.get_csv("emote-sets").unwrap_or_default(),
+            emote_sets: source.tags.get("emote-sets").unwrap_or_default(),
             raw: source,
         })
     }
@@ -1043,7 +1077,8 @@ pub struct UserNoticeBase {
     text: Option<UnsafeSlice>,
     pub user: TwitchUser,
     color: Option<UnsafeSlice>,
-    emotes: Vec<UnsafeSlice>,
+    #[csv]
+    emotes: UnsafeSlice,
     id: UnsafeSlice,
     room_id: UnsafeSlice,
     pub system_msg: String,
@@ -1131,10 +1166,6 @@ pub struct BitsBadgeTier {
     threshold: UnsafeSlice,
 }
 
-// TODO: finish implementing all the commands
-// TODO: write test (at least 2) for each command
-// TODO: establish a connection to twitch (anonymous, for now) and try to parse
-// some messages
 #[derive(Clone, Debug, PartialEq)]
 pub enum UserNotice {
     Sub(Sub),
@@ -1167,7 +1198,7 @@ impl UserNotice {
                     badges: source.tags.get("badges"),
                 },
                 color: source.tags.get("color"),
-                emotes: source.tags.get_csv("emotes").unwrap_or_default(),
+                emotes: source.tags.get("emotes").unwrap_or_default(),
                 id: source.tags.require("id")?,
                 room_id: source.tags.require("room-id")?,
                 time: source.tags.require_date("tmi-sent-ts")?,
@@ -1261,9 +1292,11 @@ pub struct UserState {
     channel: UnsafeSlice,
     pub display_name: String,
     badge_info: Option<UnsafeSlice>,
-    badges: Vec<UnsafeSlice>,
+    #[csv]
+    badges: UnsafeSlice,
     color: Option<UnsafeSlice>,
-    emote_sets: Vec<UnsafeSlice>,
+    #[csv]
+    emote_sets: UnsafeSlice,
     raw: irc::Message,
 }
 
@@ -1273,9 +1306,9 @@ impl UserState {
             channel: source.channel.ok_or_else(|| Error::MissingParam("channel".into()))?,
             display_name: source.tags.require_ns("display-name")?,
             badge_info: source.tags.get("badge-info"),
-            badges: source.tags.get_csv("badges").unwrap_or_default(),
+            badges: source.tags.get("badges").unwrap_or_default(),
             color: source.tags.get("color"),
-            emote_sets: source.tags.get_csv("emote-sets").unwrap_or_default(),
+            emote_sets: source.tags.get("emote-sets").unwrap_or_default(),
             raw: source,
         })
     }
@@ -1346,22 +1379,56 @@ mod tests {
 
     #[test]
     pub fn parse_ping() {
-        let src = ":tmi.twitch.tv PING".to_string();
+        let src = "PING :tmi.twitch.tv".to_string();
         let msg = irc::Message::parse(src).unwrap();
 
         assert_eq!(
-            Message::Ping(Ping { raw: msg.clone() }),
+            Message::Ping(Ping {
+                arg: Some("tmi.twitch.tv".into()),
+                raw: msg.clone()
+            }),
+            Message::parse_irc(msg).unwrap()
+        )
+    }
+
+    #[test]
+    pub fn parse_ping_no_arg() {
+        let src = "PING".to_string();
+        let msg = irc::Message::parse(src).unwrap();
+
+        assert_eq!(
+            Message::Ping(Ping {
+                arg: None,
+                raw: msg.clone()
+            }),
             Message::parse_irc(msg).unwrap()
         )
     }
 
     #[test]
     pub fn parse_pong() {
-        let src = ":tmi.twitch.tv PONG".to_string();
+        let src = "PONG :tmi.twitch.tv".to_string();
         let msg = irc::Message::parse(src).unwrap();
 
         assert_eq!(
-            Message::Pong(Pong { raw: msg.clone() }),
+            Message::Pong(Pong {
+                arg: Some("tmi.twitch.tv".into()),
+                raw: msg.clone()
+            }),
+            Message::parse_irc(msg).unwrap()
+        )
+    }
+
+    #[test]
+    pub fn parse_pong_no_arg() {
+        let src = "PONG".to_string();
+        let msg = irc::Message::parse(src).unwrap();
+
+        assert_eq!(
+            Message::Pong(Pong {
+                arg: None,
+                raw: msg.clone()
+            }),
             Message::parse_irc(msg).unwrap()
         )
     }
@@ -1421,7 +1488,7 @@ mod tests {
                 is_action: false,
                 bits: None,
                 color: Some("#19E6E6".into()),
-                emotes: vec![],
+                emotes: "".into(),
                 id: "7eb848c9-1060-4e5e-9f4c-612877982e79".into(),
                 room_id: "40286300".into(),
                 time: Utc.timestamp_millis(1563096499780i64),
@@ -1456,7 +1523,7 @@ mod tests {
                 is_action: true,
                 bits: None,
                 color: Some("#19E6E6".into()),
-                emotes: vec![],
+                emotes: "".into(),
                 id: "7eb848c9-1060-4e5e-9f4c-612877982e79".into(),
                 room_id: "40286300".into(),
                 time: Utc.timestamp_millis(1563096499780i64),
@@ -1490,7 +1557,7 @@ mod tests {
                 text: "Riftey Kappa".into(),
                 is_action: false,
                 color: Some("#2E8B57".into()),
-                emotes: vec!["25:7-11".into()],
+                emotes: "25:7-11".into(),
                 id: "2034".into(),
                 raw: msg.clone(),
             }),
@@ -1522,7 +1589,7 @@ mod tests {
                 text: "Riftey Kappa".into(),
                 is_action: true,
                 color: Some("#2E8B57".into()),
-                emotes: vec!["25:7-11".into()],
+                emotes: "25:7-11".into(),
                 id: "2034".into(),
                 raw: msg.clone(),
             }),
@@ -1634,9 +1701,9 @@ mod tests {
                 user_id: "40286300".into(),
                 display_name: "RANDERS".into(),
                 badge_info: None,
-                badges: vec!["bits-charity/1".into()],
+                badges: "bits-charity/1".into(),
                 color: Some("#19E6E6".into()),
-                emote_sets: vec!["0".into(), "42".into(), "237".into()],
+                emote_sets: "0,42,237".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1657,9 +1724,9 @@ mod tests {
                 user_id: "422021310".into(),
                 display_name: "receivertest3".into(),
                 badge_info: None,
-                badges: vec![],
+                badges: "".into(),
                 color: None,
-                emote_sets: vec!["0".into()],
+                emote_sets: "0".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()
@@ -1805,7 +1872,7 @@ mod tests {
                         badges: Some("staff/1,broadcaster/1,turbo/1".into())
                     },
                     color: Some("#008000".into()),
-                    emotes: vec![],
+                    emotes: "".into(),
                     id: "db25007f-7a18-43eb-9379-80131e44d633".into(),
                     room_id: "1337".into(),
                     system_msg: "ronni has subscribed for 6 months!".into(),
@@ -1852,7 +1919,7 @@ mod tests {
                         badges: Some("staff/1,premium/1".into())
                     },
                     color: Some("#0000FF".into()),
-                    emotes: vec![],
+                    emotes: "".into(),
                     id: "e9176cd8-5e22-4684-ad40-ce53c2561c5e".into(),
                     room_id: "19571752".into(),
                     system_msg: "TWW2 gifted a Tier 1 sub to Mr_Woodchuck!".into(),
@@ -1898,9 +1965,9 @@ mod tests {
                 channel: "randers".into(),
                 display_name: "zwb3_pyramids".into(),
                 badge_info: None,
-                badges: vec![],
+                badges: "".into(),
                 color: Some("#FF0000".into()),
-                emote_sets: vec!["0".into()],
+                emote_sets: "0".into(),
                 raw: msg.clone(),
             }),
             Message::parse_irc(msg).unwrap()

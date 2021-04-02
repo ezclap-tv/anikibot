@@ -1,12 +1,6 @@
-///! High-level Twitch chat client
-///!
-///! Features:
-///! * Maintaining a connection to Twitch, including PING/PONG, RECONNECT and
-/// tmi.twitch.tv going down ! * Async, stream-based interface for
-/// sending/receiving messages ! * Automatic rate limiting based on known
-/// user/room state
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
+use chrono::Duration;
 use futures::StreamExt;
 use thiserror::Error;
 use tmi::write;
@@ -16,8 +10,12 @@ use tokio::{
 };
 use tokio_rustls::client::TlsStream;
 use tokio_stream::wrappers::LinesStream;
+pub use write::Mode;
 
-use crate::{irc, tmi};
+use crate::{
+    irc,
+    tmi::{self, Message},
+};
 
 const TMI_URL_HOST: &str = "irc.chat.twitch.tv";
 const TMI_TLS_PORT: u16 = 6697;
@@ -37,9 +35,6 @@ impl Default for Login {
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct Config {
     pub membership_data: bool,
-    pub reconnect: bool,
-    pub reconnect_timeout: i64,
-    pub rate_limit: bool,
     pub credentials: Login,
 }
 
@@ -58,6 +53,8 @@ pub enum Error {
     Timeout,
     #[error("Stream closed")]
     StreamClosed,
+    #[error("Internal buffer is not large enough for message")]
+    Formatting(#[from] std::fmt::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -97,13 +94,16 @@ async fn connect_tls(host: &str, port: u16) -> Result<TlsStream<TcpStream>> {
     Ok(out)
 }
 
-pub struct Receiver {
+pub struct Reader {
     stream: LinesStream<BufReader<ReadHalf<TlsStream<TcpStream>>>>,
 }
-impl Receiver {
-    pub async fn next(&mut self) -> Result<String> {
+impl Reader {
+    pub fn new(stream: LinesStream<BufReader<ReadHalf<TlsStream<TcpStream>>>>) -> Reader { Reader { stream } }
+    pub async fn next(&mut self) -> Result<Message> {
         if let Some(message) = self.stream.next().await {
-            Ok(message?)
+            let message = message?;
+            log::debug!("{}", message);
+            Ok(Message::parse(message)?)
         } else {
             Err(Error::StreamClosed)
         }
@@ -111,83 +111,221 @@ impl Receiver {
 }
 
 pub struct Sender {
+    buffer: String,
     stream: WriteHalf<TlsStream<TcpStream>>,
 }
 impl Sender {
+    pub fn new(stream: WriteHalf<TlsStream<TcpStream>>) -> Sender {
+        Sender {
+            buffer: String::with_capacity(2048),
+            stream,
+        }
+    }
+    /// Sends a raw `message` to twitch.
+    ///
+    /// `message` must be terminated with `\r\n`.
+    ///
+    /// Use at your own risk.
     pub async fn send(&mut self, message: &str) -> Result<()> {
+        log::debug!("Sent message: {}", message);
         self.stream.write_all(message.as_bytes()).await?;
+        Ok(())
+    }
+    pub async fn pong(&mut self, arg: Option<&str>) -> Result<()> {
+        write::pong(&mut self.buffer, arg)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Sends a capability request
+    pub async fn cap(&mut self, with_membership: bool) -> Result<()> {
+        write::cap(&mut self.buffer, with_membership)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Sends a `PASS oauth:<token>` message
+    pub async fn pass(&mut self, token: &str) -> Result<()> {
+        write::pass(&mut self.buffer, token)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Sends a `NICK <login>` message
+    pub async fn nick(&mut self, login: &str) -> Result<()> {
+        write::nick(&mut self.buffer, login)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Join `channel`
+    pub async fn join(&mut self, channel: &str) -> Result<()> {
+        write::join(&mut self.buffer, channel)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Leave `channel`
+    pub async fn part(&mut self, channel: &str) -> Result<()> {
+        write::part(&mut self.buffer, channel)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Sends `message` to `channel`
+    pub async fn privmsg(&mut self, channel: &str, message: &str) -> Result<()> {
+        write::privmsg(&mut self.buffer, channel, message)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Send `message` directly to `user`
+    pub async fn whisper(&mut self, user: &str, message: &str) -> Result<()> {
+        write::whisper(&mut self.buffer, user, message)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Equivalent to `/me <message>`
+    pub async fn me(&mut self, channel: &str, message: &str) -> Result<()> {
+        write::whisper(&mut self.buffer, channel, message)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Clears chat in `channel`
+    pub async fn clear(&mut self, channel: &str) -> Result<()> {
+        write::clear(&mut self.buffer, channel)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Timeout `user` in `channel` for `duration`
+    ///
+    /// Maximum timeout is 2 weeks. In case `duration` is `None`, default is 10
+    /// minutes.
+    pub async fn timeout(&mut self, channel: &str, user: &str, duration: Option<Duration>) -> Result<()> {
+        write::timeout(&mut self.buffer, channel, user, duration)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Removes `user`'s timeout in `channel`
+    pub async fn untimeout(&mut self, channel: &str, user: &str) -> Result<()> {
+        write::untimeout(&mut self.buffer, channel, user)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Ban `user` in `channel`
+    pub async fn ban(&mut self, channel: &str, user: &str) -> Result<()> {
+        write::ban(&mut self.buffer, channel, user)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// Unban `user` in `channel`
+    pub async fn unban(&mut self, channel: &str, user: &str) -> Result<()> {
+        write::unban(&mut self.buffer, channel, user)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
+        Ok(())
+    }
+    /// For changing the room state, e.g. slow mode, emote-only mode, etc.
+    pub async fn roomstate(&mut self, channel: &str, mode: Mode, state: bool) -> Result<()> {
+        write::roomstate(&mut self.buffer, channel, mode, state)?;
+        log::debug!("Sent message: {}", self.buffer);
+        self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
 }
 
-pub struct Twitch;
-impl Twitch {
-    pub async fn connect(config: Config) -> Result<(Receiver, Sender)> {
-        // 1. connect
-        let connection: TlsStream<TcpStream> =
-            tokio::time::timeout(Duration::from_secs(5), connect_tls(TMI_URL_HOST, TMI_TLS_PORT))
-                .await
-                .or(Err(Error::Timeout))??;
-        let (read, mut write) = split(connection);
-        let mut read = LinesStream::new(BufReader::new(read).lines());
+pub struct Connection {
+    pub sender: Sender,
+    pub reader: Reader,
+}
 
-        // 2. request capabilities
-        // < CAP REQ :twitch.tv/commands twitch.tv/tags [twitch.tv/membership]
-        let req = write::cap(false);
-        print!("< {}", req.trim());
-        write.write_all(req.as_bytes()).await?;
-        // 3. wait for CAP * ACK :twitch.tv/commands twitch.tv/tags
-        if let Some(line) = read.next().await {
-            let line = line?;
-            println!("> {}", line);
-            match tmi::Message::parse(line)? {
-                tmi::Message::Capability(capability) => {
-                    if capability.which() != expected_cap_ack(config.membership_data) {
-                        return err!(Generic, "Did not receive expected capabilities");
-                    }
-                }
-                _ => {
+impl Connection {
+    pub fn split(self) -> (Sender, Reader) { (self.sender, self.reader) }
+    pub fn join(sender: Sender, reader: Reader) -> Connection { Connection { sender, reader } }
+}
+
+impl From<Connection> for (Sender, Reader) {
+    fn from(value: Connection) -> (Sender, Reader) { value.split() }
+}
+impl From<(Sender, Reader)> for Connection {
+    fn from(value: (Sender, Reader)) -> Connection { Connection::join(value.0, value.1) }
+}
+
+pub async fn connect(config: Config) -> Result<Connection> {
+    log::debug!("Connecting to TMI");
+    // 1. connect
+    let connection: TlsStream<TcpStream> = tokio::time::timeout(
+        Duration::seconds(5).to_std().expect("Failed to convert duration"),
+        connect_tls(TMI_URL_HOST, TMI_TLS_PORT),
+    )
+    .await
+    .or(Err(Error::Timeout))??;
+    let (read, write) = split(connection);
+    let mut read = LinesStream::new(BufReader::new(read).lines());
+    let mut sender = Sender::new(write);
+
+    // 2. request capabilities
+    // < CAP REQ :twitch.tv/commands twitch.tv/tags [twitch.tv/membership]
+    log::debug!(
+        "Requesting capabilities: {}",
+        if config.membership_data {
+            "commands, tags, membership"
+        } else {
+            "commands, tags"
+        }
+    );
+
+    sender.cap(config.membership_data).await?;
+    // wait for CAP * ACK :twitch.tv/commands twitch.tv/tags
+    if let Some(line) = read.next().await {
+        let line = line?;
+        match tmi::Message::parse(line)? {
+            tmi::Message::Capability(capability) => {
+                if capability.which() != expected_cap_ack(config.membership_data) {
                     return err!(Generic, "Did not receive expected capabilities");
                 }
             }
-        }
-        // 4. authenticate
-        match &config.credentials {
-            Login::Anonymous => {
-                use rand::Rng;
-                // don't need PASS here
-                let login = write::nick(&format!("justinfan{}", rand::thread_rng().gen_range(10000..99999)));
-                // < NICK <login>
-                println!("< {}", login.trim());
-                write.write_all(login.as_bytes()).await?;
-            }
-            Login::Regular { login, token } => {
-                let pass = write::pass(token);
-                let nick = write::nick(login);
-                // < PASS oauth:<token>
-                println!("< {}", pass.trim());
-                write.write_all(pass.as_bytes()).await?;
-                // < NICK <login>
-                println!("< {}", nick.trim());
-                write.write_all(nick.as_bytes()).await?;
+            _ => {
+                return err!(Generic, "Did not receive expected capabilities");
             }
         }
-        // 5. wait for response with command `001`
-        if let Some(line) = read.next().await {
-            let line = line?;
-            println!("> {}", line.trim());
-            match tmi::Message::parse(line)? {
-                tmi::Message::Unknown(msg) => {
-                    if msg.cmd != irc::Command::Unknown("001".into()) {
-                        return err!(Generic, "Failed to authenticate");
-                    }
-                }
-                _ => {
-                    return err!(Generic, "Did not receive expected capabilities");
-                }
-            }
-        }
-
-        Ok((Receiver { stream: read }, Sender { stream: write }))
     }
+
+    // 3. authenticate
+    match &config.credentials {
+        Login::Anonymous => {
+            let login = format!("justinfan{}", rand::thread_rng().gen_range(10000..99999));
+            log::debug!("Authenticating as {}", login);
+            use rand::Rng;
+            // don't need PASS here
+            sender.nick(&login).await?;
+        }
+        Login::Regular { login, token } => {
+            log::debug!("Authenticating as {}", login);
+            sender.pass(&token).await?;
+            sender.nick(&login).await?;
+        }
+    }
+    if let Some(line) = read.next().await {
+        let line = line?;
+        match tmi::Message::parse(line)? {
+            tmi::Message::Unknown(msg) => {
+                if msg.cmd != irc::Command::Unknown("001".into()) {
+                    return err!(Generic, "Failed to authenticate");
+                }
+            }
+            _ => {
+                return err!(Generic, "Did not receive expected capabilities");
+            }
+        }
+    }
+    log::debug!("Connection successful");
+
+    Ok(Connection::join(sender, Reader::new(read)))
 }

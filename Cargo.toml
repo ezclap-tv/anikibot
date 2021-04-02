@@ -1,7 +1,8 @@
 [workspace]
 
 members = [
-    "bot",
+    "bot2",
+    "script",
     "twitch",
     "twitch/twitch_getters"
 ]

@@ -14,8 +14,6 @@ use crate::util::UnsafeSlice;
 pub enum Error {
     #[error("Expected tag '{0}'")]
     MissingTag(String),
-    #[error("Missing prefix")]
-    MissingPrefix,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -24,7 +22,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct Message {
     // TODO: Params should just be a range
     pub tags: Tags,
-    pub prefix: Prefix,
+    pub prefix: Option<Prefix>,
     pub cmd: Command,
     pub channel: Option<UnsafeSlice>,
     pub params: Option<Params>,
@@ -42,7 +40,7 @@ impl Message {
         let input = Pin::new(source);
         let source = input.trim();
         let (tags, remainder) = Tags::parse(&source);
-        let (prefix, remainder) = Prefix::parse(remainder)?;
+        let (prefix, remainder) = Prefix::parse(remainder);
         let (cmd, remainder) = Command::parse(remainder);
         let (channel, remainder) = Channel::parse(remainder);
         let params = Params::parse(remainder);
@@ -374,8 +372,10 @@ impl Prefix {
     /// * `nick!user@host`
     ///
     /// Returns (prefix, remainder)
-    pub fn parse(data: &str) -> Result<(Prefix, &str)> {
-        if let Some(start) = data.find(':') {
+    pub fn parse(data: &str) -> (Option<Prefix>, &str) {
+        let data = data.trim_start();
+        if data.starts_with(':') {
+            let start = 0;
             let end = match data[start..].find(' ') {
                 Some(end) => start + end,
                 None => start + data[start..].len(),
@@ -397,16 +397,16 @@ impl Prefix {
                 None => (None, None, prefix),
             };
 
-            Ok((
-                Prefix {
+            (
+                Some(Prefix {
                     nick: nick.map(|v| v.into()),
                     user: user.map(|v| v.into()),
                     host: host.into(),
-                },
+                }),
                 &data[end..],
-            ))
+            )
         } else {
-            Err(Error::MissingPrefix)
+            (None, data)
         }
     }
 }
@@ -479,15 +479,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_empty_prefix() { assert_eq!(None, Prefix::parse("PING :tmi.twitch.tv").0) }
+
+    #[test]
     fn parse_prefix_host_only() {
         // :test.tmi.twitch.tv
         assert_eq!(
-            Prefix {
+            Some(Prefix {
                 nick: None,
                 user: None,
-                host: "test.tmi.twitch.tv".into()
-            },
-            Prefix::parse(":test.tmi.twitch.tv").unwrap().0
+                host: "tmi.twitch.tv".into()
+            }),
+            Prefix::parse(":tmi.twitch.tv").0
         );
     }
 
@@ -495,12 +498,12 @@ mod tests {
     fn parse_prefix_host_and_nick() {
         // :test@test.tmi.twitch.tv
         assert_eq!(
-            Prefix {
+            Some(Prefix {
                 nick: Some("test".into()),
                 user: None,
                 host: "test.tmi.twitch.tv".into()
-            },
-            Prefix::parse(":test@test.tmi.twitch.tv").unwrap().0
+            }),
+            Prefix::parse(":test@test.tmi.twitch.tv").0
         );
     }
 
@@ -508,18 +511,13 @@ mod tests {
     fn parse_prefix_full() {
         // :test!test@test.tmi.twitch.tv
         assert_eq!(
-            Prefix {
+            Some(Prefix {
                 nick: Some("test".into()),
                 user: Some("test".into()),
                 host: "test.tmi.twitch.tv".into()
-            },
-            Prefix::parse(":test!test@test.tmi.twitch.tv").unwrap().0
+            }),
+            Prefix::parse(":test!test@test.tmi.twitch.tv").0
         );
-    }
-
-    #[test]
-    fn parse_missing_prefix() {
-        assert_eq!(Error::MissingPrefix, Prefix::parse("").unwrap_err());
     }
 
     #[test]
@@ -528,17 +526,33 @@ mod tests {
     // TODO: tests for parsing other message types
 
     #[test]
+    fn parse_real_ping() {
+        let src = "PING :tmi.twitch.tv".to_string();
+        assert_eq!(
+            Message {
+                tags: Tags(HashMap::new()),
+                prefix: None,
+                cmd: Command::Ping,
+                channel: None,
+                params: Some(Params(":tmi.twitch.tv".into())),
+                source: Pin::new(src.clone())
+            },
+            Message::parse(src).unwrap()
+        )
+    }
+
+    #[test]
     fn parse_join() {
         let src = ":test!test@test.tmi.twitch.tv JOIN #channel".to_string();
 
         assert_eq!(
             Message {
                 tags: Tags(HashMap::new()),
-                prefix: Prefix {
+                prefix: Some(Prefix {
                     nick: Some("test".into()),
                     user: Some("test".into()),
                     host: "test.tmi.twitch.tv".into()
-                },
+                }),
                 cmd: Command::Join,
                 channel: Some("channel".into()),
                 params: None,
@@ -586,11 +600,11 @@ mod tests {
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect()
                 ),
-                prefix: Prefix {
+                prefix: Some(Prefix {
                     nick: Some("jun1orrrr".into()),
                     user: Some("jun1orrrr".into()),
                     host: "jun1orrrr.tmi.twitch.tv".into()
-                },
+                }),
                 cmd: Command::Privmsg,
                 channel: Some("pajlada".into()),
                 params: Some(Params(":dank cam".into())),
@@ -624,11 +638,11 @@ mod tests {
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
-                prefix: Prefix {
+                prefix: Some(Prefix {
                     nick: Some("pajbot".into()),
                     user: Some("pajbot".into()),
                     host: "pajbot.tmi.twitch.tv".into(),
-                },
+                }),
                 cmd: Command::Whisper,
                 channel: None,
                 params: Some(Params("randers :Riftey Kappa".into())),
@@ -662,11 +676,11 @@ mod tests {
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
-                prefix: Prefix {
+                prefix: Some(Prefix {
                     nick: Some("pajbot".into()),
                     user: Some("pajbot".into()),
                     host: "pajbot.tmi.twitch.tv".into(),
-                },
+                }),
                 cmd: Command::Whisper,
                 channel: None,
                 params: Some(Params("randers :\x01ACTION Riftey Kappa\x01".into())),
@@ -696,11 +710,11 @@ mod tests {
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect(),
                 ),
-                prefix: Prefix {
+                prefix: Some(Prefix {
                     nick: None,
                     user: None,
                     host: "tmi.twitch.tv".into(),
-                },
+                }),
                 cmd: Command::Clearmsg,
                 channel: Some("randers".into()),
                 params: Some(Params(

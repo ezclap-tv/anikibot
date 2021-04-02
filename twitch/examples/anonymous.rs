@@ -1,30 +1,35 @@
-use twitch::conn::{Config, Twitch};
-use twitch::tmi::Message;
+use twitch::{Config, Message};
+
+fn init_logger() -> std::result::Result<(), log::SetLoggerError> {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "DEBUG");
+    }
+    pretty_env_logger::try_init()
+}
 
 #[tokio::main]
 async fn main() {
-    let (mut recv, mut sender) = Twitch::connect(Config::default()).await.unwrap();
-    sender.send("JOIN #moscowwbish\r\n").await.unwrap();
+    init_logger().unwrap();
+
+    let mut conn = twitch::connect(Config::default()).await.unwrap();
+    conn.sender.join("moscowwbish").await.unwrap();
 
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                println!("CTRL-C");
+                log::info!("CTRL-C");
                 break;
             },
-            result = recv.next() => match result {
-                Ok(message) => {
-                    println!("> {}", message);
-                    match Message::parse(message).unwrap() {
-                        Message::Ping(_) => sender.send("PONG\r\n").await.unwrap(),
-                        Message::Privmsg(message) => {
-                            println!("#{} {}: {}", message.channel(), message.user.name, message.text());
-                            if message.text().starts_with("!stop") {
-                                break;
-                            }
-                        },
-                        _ => ()
-                    }
+            result = conn.reader.next() => match result {
+                Ok(message) => match message {
+                    Message::Ping(ping) => conn.sender.pong(ping.arg()).await.unwrap(),
+                    Message::Privmsg(message) => {
+                        log::info!("#{} {} ({}): {}", message.channel(), message.user.name, message.user.id(), message.text());
+                        if message.text().starts_with("!stop") {
+                            break;
+                        }
+                    },
+                    _ => ()
                 },
                 Err(err) => {
                     panic!("{}", err);
