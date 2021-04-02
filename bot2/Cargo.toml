@@ -1,0 +1,24 @@
+[package]
+name = "bot2"
+version = "0.1.0"
+authors = ["jprochazk <honza.spacir@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.39"
+log = "0.4.14"
+chrono = "0.4.19"
+pretty_env_logger = "0.4.0"
+tokio = { version = "1.4.0", features = ["full"] }
+tokio-stream = { version = "0.1.5", features = ["io-util"] }
+sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "sqlite", "chrono", "migrate", "macros" ] }
+serde = { version = "1.0", features = ["derive"] }
+toml = { version = "0.5.8" }
+num_cpus = { version = "1.13" }
+twitch = { path = "../twitch" }
+script = { path = "../script" }
+
+[dev-dependencies]
+tokio-test = "0.4.0"

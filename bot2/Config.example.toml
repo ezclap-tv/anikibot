@@ -1,0 +1,7 @@
+database_name = ":memory:"
+worker_memory_limit = 536870912 # specified in BYTES
+# concurrency = 6 # by default, this will be however many logical cores are available
+
+[credentials] # if not specified, bot will connect as anonymous and will be unable to send messages to chat
+twitch_login = "your_login_here"
+twitch_token = "oauth:<something! generate this using the link in the readme>"
