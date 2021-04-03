@@ -218,6 +218,10 @@ pub struct Privmsg {
     raw: irc::Message,
 }
 
+// SAFETY: Privmsg owns the source String, and it has no interior mutability
+unsafe impl Sync for Privmsg {}
+unsafe impl Send for Privmsg {}
+
 impl Privmsg {
     pub fn parse(source: irc::Message) -> Result<Self> {
         let (text, is_action) = match source.params.as_ref() {

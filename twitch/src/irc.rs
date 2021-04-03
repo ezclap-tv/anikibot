@@ -29,6 +29,8 @@ pub struct Message {
     pub source: Pin<String>,
 }
 
+unsafe impl Send for Message {}
+
 impl Message {
     /// Parse a raw IRC Message
     ///

@@ -1,7 +1,12 @@
-use std::sync::Arc;
+use std::{num::NonZeroU32, sync::Arc};
 
 use chrono::Duration;
 use futures::StreamExt;
+use governor::{
+    clock::DefaultClock,
+    state::{InMemoryState, NotKeyed},
+    RateLimiter,
+};
 use thiserror::Error;
 use tmi::write;
 use tokio::{
@@ -110,14 +115,24 @@ impl Reader {
     }
 }
 
+// TODO: Better rate-limiting
+// rate limits are:
+// * absolute (20msg / 30s)
+// * per-channel (based on userstate + roomstate)
+//   * VIP/Mod = can ignore
+//   * Regular = global slow mode + room slow mode
+
+// for now, it's always 1 message per second, which won't work everywhere
 pub struct Sender {
     buffer: String,
+    rate: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     stream: WriteHalf<TlsStream<TcpStream>>,
 }
 impl Sender {
     pub fn new(stream: WriteHalf<TlsStream<TcpStream>>) -> Sender {
         Sender {
             buffer: String::with_capacity(2048),
+            rate: RateLimiter::direct(governor::Quota::per_second(NonZeroU32::new(1).unwrap())),
             stream,
         }
     }
@@ -128,12 +143,14 @@ impl Sender {
     /// Use at your own risk.
     pub async fn send(&mut self, message: &str) -> Result<()> {
         log::debug!("Sent message: {}", message);
+        self.rate.until_ready().await;
         self.stream.write_all(message.as_bytes()).await?;
         Ok(())
     }
     pub async fn pong(&mut self, arg: Option<&str>) -> Result<()> {
         write::pong(&mut self.buffer, arg)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -141,13 +158,15 @@ impl Sender {
     pub async fn cap(&mut self, with_membership: bool) -> Result<()> {
         write::cap(&mut self.buffer, with_membership)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
     /// Sends a `PASS oauth:<token>` message
     pub async fn pass(&mut self, token: &str) -> Result<()> {
         write::pass(&mut self.buffer, token)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: PASS oauth:<...>");
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -155,6 +174,7 @@ impl Sender {
     pub async fn nick(&mut self, login: &str) -> Result<()> {
         write::nick(&mut self.buffer, login)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -162,6 +182,7 @@ impl Sender {
     pub async fn join(&mut self, channel: &str) -> Result<()> {
         write::join(&mut self.buffer, channel)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -169,6 +190,7 @@ impl Sender {
     pub async fn part(&mut self, channel: &str) -> Result<()> {
         write::part(&mut self.buffer, channel)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -176,6 +198,7 @@ impl Sender {
     pub async fn privmsg(&mut self, channel: &str, message: &str) -> Result<()> {
         write::privmsg(&mut self.buffer, channel, message)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -183,6 +206,7 @@ impl Sender {
     pub async fn whisper(&mut self, user: &str, message: &str) -> Result<()> {
         write::whisper(&mut self.buffer, user, message)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -190,6 +214,7 @@ impl Sender {
     pub async fn me(&mut self, channel: &str, message: &str) -> Result<()> {
         write::whisper(&mut self.buffer, channel, message)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -197,6 +222,7 @@ impl Sender {
     pub async fn clear(&mut self, channel: &str) -> Result<()> {
         write::clear(&mut self.buffer, channel)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -207,6 +233,7 @@ impl Sender {
     pub async fn timeout(&mut self, channel: &str, user: &str, duration: Option<Duration>) -> Result<()> {
         write::timeout(&mut self.buffer, channel, user, duration)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -214,6 +241,7 @@ impl Sender {
     pub async fn untimeout(&mut self, channel: &str, user: &str) -> Result<()> {
         write::untimeout(&mut self.buffer, channel, user)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -221,6 +249,7 @@ impl Sender {
     pub async fn ban(&mut self, channel: &str, user: &str) -> Result<()> {
         write::ban(&mut self.buffer, channel, user)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -228,6 +257,7 @@ impl Sender {
     pub async fn unban(&mut self, channel: &str, user: &str) -> Result<()> {
         write::unban(&mut self.buffer, channel, user)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }
@@ -235,6 +265,7 @@ impl Sender {
     pub async fn roomstate(&mut self, channel: &str, mode: Mode, state: bool) -> Result<()> {
         write::roomstate(&mut self.buffer, channel, mode, state)?;
         log::debug!("Sent message: {}", self.buffer);
+        self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
     }

@@ -31,9 +31,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub struct Context {
     pub config: Config,
-    scripts: HashMap<String, lua::Function<'static>>,
+    scripts: HashMap<String, (String, lua::Function<'static>)>,
     ctx: Option<Box<Lua>>,
 }
+
+pub type Variadic = lua::Variadic<String>;
 
 /// Used to *temporarily* acquire `&'static mut Lua` to circumvent lifetime
 /// bounds
@@ -78,15 +80,42 @@ impl Context {
         })
     }
 
+    pub fn reset(&mut self) {
+        // none of the Err cases should arise here
+        // clone scripts
+        let scripts = self
+            .scripts
+            .iter()
+            .map(|(n, (s, _))| (n.clone(), s.clone()))
+            .collect::<Vec<_>>();
+        // create new lua state
+        let libs: StdLib = StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH;
+        let lua = Lua::new_with(libs).unwrap();
+        if let Some(memory_limit) = self.config.memory_limit.as_ref() {
+            lua.set_memory_limit(*memory_limit)
+                .expect("Failed to set memory limit while initializing Lua state");
+        }
+        std::mem::drop(std::mem::take(&mut self.scripts));
+        std::mem::drop(std::mem::replace(&mut self.ctx, Some(Box::new(lua))));
+        for (name, code) in scripts {
+            self.load(name, &code)
+                .expect("Failed to load one of previous commands (?)");
+        }
+    }
+
     /// If the script with `name` already exists, it will be replaced.
-    pub fn load(&mut self, name: String, script: String) -> Result<()> {
+    pub fn load(&mut self, name: String, script: &str) -> Result<()> {
         // SAFETY: The leaked ptr is returned into the Box when this is dropped.
         // Only one mutable reference to the Lua state exists.
         let (_lg, lua) = unsafe { LuaStaticGuard::new(&mut self.ctx) };
-        let chunk = lua.load(&script);
-        let _ = self.scripts.insert(name, chunk.into_function().map_err(Error::Load)?);
+        let chunk = lua.load(script);
+        let _ = self
+            .scripts
+            .insert(name, (script.to_string(), chunk.into_function().map_err(Error::Load)?));
         Ok(())
     }
+
+    pub fn exists(&self, name: &str) -> bool { self.scripts.contains_key(name) }
 
     /// Unload a script from the context
     ///
@@ -96,13 +125,13 @@ impl Context {
     /// Synchronously execute a script. The script must be loaded with
     /// `Engine::load` beforehand. Contents of the script must fully execute
     /// synchronously, too.
-    pub fn execute<A: lua::ToLuaMulti<'static>, R: lua::FromLuaMulti<'static>>(
+    pub fn exec<A: lua::ToLuaMulti<'static>, R: lua::FromLuaMulti<'static>>(
         &mut self,
         name: &str,
         args: A,
     ) -> Result<R> {
         match self.scripts.get(name) {
-            Some(script) => Ok(script.call(args).map_err(exec_error)?),
+            Some(script) => Ok(script.1.call(args).map_err(exec_error)?),
             None => Err(Error::NotLoaded(name.into())),
         }
     }
@@ -110,13 +139,13 @@ impl Context {
     /// Asynchronously execute a script. The script must be loaded with
     /// `Engine::load` beforehand. Contents of the script may or may not execute
     /// asynchronously.
-    pub async fn execute_async<A: lua::ToLuaMulti<'static>, R: lua::FromLuaMulti<'static>>(
+    pub async fn exec_async<A: lua::ToLuaMulti<'static>, R: lua::FromLuaMulti<'static>>(
         &mut self,
         name: &str,
         args: A,
     ) -> Result<R> {
         match self.scripts.get(name) {
-            Some(script) => Ok(script.call_async(args).await.map_err(exec_error)?),
+            Some(script) => Ok(script.1.call_async(args).await.map_err(exec_error)?),
             None => Err(Error::NotLoaded(name.into())),
         }
     }
@@ -161,23 +190,23 @@ impl Context {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use super::*;
 
     #[test]
     fn execution() {
         let mut ctx = Context::init(Config::default()).unwrap();
-        ctx.load("test".into(), "return 1+1".into()).unwrap();
-        let out: u32 = ctx.execute("test", ()).unwrap();
+        ctx.load("test".into(), "return 1+1").unwrap();
+        let out: u32 = ctx.exec("test", ()).unwrap();
         assert_eq!(out, 2u32);
     }
 
     #[tokio::test]
     async fn async_execution() {
         let mut ctx = Context::init(Config::default()).unwrap();
-        ctx.load("test".into(), "return 1+1".into()).unwrap();
-        let out: u32 = ctx.execute_async("test", ()).await.unwrap();
+        ctx.load("test".into(), "return 1+1").unwrap();
+        let out: u32 = ctx.exec_async("test", ()).await.unwrap();
         assert_eq!(out, 2u32);
     }
 

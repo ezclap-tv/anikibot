@@ -21,6 +21,7 @@ log = "0.4.14"
 rand = "0.8.3"
 lazy_static = "1.4.0"
 unicode-segmentation = "1.7.1"
+governor = "0.3.2"
 twitch_getters = { path = "./twitch_getters" }
 
 [dev-dependencies]
