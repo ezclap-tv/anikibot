@@ -1,10 +1,15 @@
-use std::time::Duration;
+mod config;
+mod util;
+mod worker;
+
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use sqlx::{Connection, SqliteConnection};
-
-mod config;
 use config::Config;
+use sqlx::{Connection, SqliteConnection};
+use tokio::sync::Mutex;
+use util::Pool;
+use worker::Worker;
 
 fn init_logger() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
@@ -16,43 +21,52 @@ fn init_logger() -> Result<()> {
 struct Bot {
     config: Config,
     db: sqlx::SqliteConnection,
-    conn: twitch::Connection,
-    script: script::Engine,
+    sender: Arc<Mutex<twitch::conn::Sender>>,
+    reader: twitch::conn::Reader,
+    worker_pool: Pool<Worker>,
 }
 
 impl Bot {
     pub async fn init(config: Config) -> Result<Bot> {
+        // init db
         let mut db = sqlx::SqliteConnection::connect(&format!("sqlite:{}", config.database_name)).await?;
         sqlx::migrate!().run(&mut db).await?;
-        let mut conn = twitch::connect(config.twitch()).await?;
+
+        // connect to twitch
+        let (mut sender, reader) = twitch::connect(config.twitch()).await?.split();
         // TEMP: manage connected channels through db
-        conn.sender.join("moscowwbish").await?;
-        let script = script::Engine::init(script::Config {
-            memory_limit: Some(config.worker_memory_limit),
-        })?;
-        conn.sender.privmsg("moscowwbish", "Connected").await?;
+        sender.join("moscowwbish").await?;
+        let sender = Arc::new(Mutex::new(sender));
+
+        // init worker pool
+        let mut id = 0usize;
+        let worker_pool = Pool::new(config.concurrency, || {
+            Worker::new(
+                {
+                    id += 1;
+                    id
+                },
+                config.worker_memory_limit,
+                sender.clone(),
+            )
+        });
+        sender.lock().await.privmsg("moscowwbish", "Connected").await?;
 
         Ok(Bot {
             config,
             db,
-            conn,
-            script,
+            sender,
+            reader,
+            worker_pool,
         })
     }
 
     pub async fn reconnect(&mut self) -> Result<()> {
-        self.conn = twitch::connect(twitch::Config::default()).await?;
+        let (mut sender, receiver) = twitch::connect(twitch::Config::default()).await?.split();
         // TEMP: manage connected channels through db
-        self.conn.sender.join("moscowwbish").await?;
-        self.conn.sender.privmsg("moscowwbish", "Connected").await?;
+        sender.join("moscowwbish").await?;
+        *(self.sender.lock().await) = sender;
 
-        Ok(())
-    }
-
-    pub fn reinit_lua(&mut self) -> Result<()> {
-        self.script = script::Engine::init(script::Config {
-            memory_limit: Some(self.config.worker_memory_limit),
-        })?;
         Ok(())
     }
 }
@@ -63,54 +77,30 @@ async fn main() -> Result<()> {
 
     let mut bot = Bot::init(Config::init(&format!(
         "{}/Config.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".into())
     )))
     .await?;
-
-    bot.script.scope(|lua| {
-        lua.globals().set(
-            "sleep",
-            lua.create_async_function(|_, secs: u64| async move {
-                tokio::time::sleep(Duration::from_secs(secs)).await;
-                Ok(())
-            })?,
-        )?;
-
-        Ok(())
-    })?;
 
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
                 break;
             },
-            msg = bot.conn.reader.next() => match msg {
+            msg = bot.reader.next() => match msg {
                 Ok(msg) => {
                     match msg {
                     twitch::Message::Ping(ping) => {
                         log::info!("Got PING");
-                        bot.conn.sender.pong(ping.arg()).await?;
+                        bot.sender.lock().await.pong(ping.arg()).await?;
                         log::info!("Sent PONG");
                     },
                     twitch::Message::Privmsg(message) => {
-                        log::info!("#{} {} ({}): {}", message.channel(), message.user.name, message.user.id(), message.text());
-                        if message.user.login() == "moscowwbish" || message.user.login() == "compileraddict" {
-                            if let Some(code) = message.text().strip_prefix("!eval ") {
-                                match bot.script.eval_async::<(), String>(code, ()).await {
-                                    Ok(r) => {
-                                        log::info!("[LUA] -> {}", r);
-                                        bot.conn.sender.privmsg(message.channel(), &r).await?;
-                                    },
-                                    Err(e) => match e {
-                                        script::Error::Memory(e) => {
-                                            log::error!("[LUA] OUT OF MEMORY -> {}", e);
-                                            bot.reinit_lua().unwrap();
-                                        }
-                                        _ => log::error!("[LUA] -> {}", &e)
-                                    }
-                                }
+                        tokio::spawn({
+                            let worker = bot.worker_pool.get().await;
+                            async move {
+                                worker.handle(message)
                             }
-                        }
+                        });
                     },
                     other => log::info!("{:?}", other)
                 }},

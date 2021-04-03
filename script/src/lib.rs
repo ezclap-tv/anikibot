@@ -29,7 +29,8 @@ fn exec_error(from: lua::Error) -> Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub struct Engine {
+pub struct Context {
+    pub config: Config,
     scripts: HashMap<String, lua::Function<'static>>,
     ctx: Option<Box<Lua>>,
 }
@@ -58,19 +59,20 @@ impl<'a> Drop for LuaStaticGuard<'a> {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Config {
     pub memory_limit: Option<usize>,
 }
 
-impl Engine {
-    pub fn init(config: Config) -> Result<Engine> {
+impl Context {
+    pub fn init(config: Config) -> Result<Context> {
         let libs: StdLib = StdLib::COROUTINE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH;
         let lua = Lua::new_with(libs).unwrap();
         if let Some(memory_limit) = config.memory_limit.as_ref() {
             lua.set_memory_limit(*memory_limit).map_err(Error::Init)?;
         }
-        Ok(Engine {
+        Ok(Context {
+            config,
             scripts: HashMap::new(),
             ctx: Some(Box::new(lua)),
         })
@@ -86,7 +88,7 @@ impl Engine {
         Ok(())
     }
 
-    /// Unload a script from the engine
+    /// Unload a script from the context
     ///
     /// If the script with `name` doesn't exist, nothing happens.
     pub fn unload(&mut self, name: &str) { let _ = self.scripts.remove(name); }
@@ -165,24 +167,24 @@ mod tests {
 
     #[test]
     fn execution() {
-        let mut engine = Engine::init(Config::default()).unwrap();
-        engine.load("test".into(), "return 1+1".into()).unwrap();
-        let out: u32 = engine.execute("test", ()).unwrap();
+        let mut ctx = Context::init(Config::default()).unwrap();
+        ctx.load("test".into(), "return 1+1".into()).unwrap();
+        let out: u32 = ctx.execute("test", ()).unwrap();
         assert_eq!(out, 2u32);
     }
 
     #[tokio::test]
     async fn async_execution() {
-        let mut engine = Engine::init(Config::default()).unwrap();
-        engine.load("test".into(), "return 1+1".into()).unwrap();
-        let out: u32 = engine.execute_async("test", ()).await.unwrap();
+        let mut ctx = Context::init(Config::default()).unwrap();
+        ctx.load("test".into(), "return 1+1".into()).unwrap();
+        let out: u32 = ctx.execute_async("test", ()).await.unwrap();
         assert_eq!(out, 2u32);
     }
 
     #[test]
     fn eval() {
-        let mut engine = Engine::init(Config::default()).unwrap();
-        let out: u32 = engine.eval("return 1+1", ()).unwrap();
+        let mut ctx = Context::init(Config::default()).unwrap();
+        let out: u32 = ctx.eval("return 1+1", ()).unwrap();
         assert_eq!(out, 2u32);
     }
 
@@ -193,15 +195,14 @@ mod tests {
             Ok(v.0 + v.1)
         }
 
-        let mut engine = Engine::init(Config::default()).unwrap();
-        engine
-            .scope(|lua| {
-                lua.globals().set("calc", lua.create_async_function(calc)?)?;
+        let mut ctx = Context::init(Config::default()).unwrap();
+        ctx.scope(|lua| {
+            lua.globals().set("calc", lua.create_async_function(calc)?)?;
 
-                Ok(())
-            })
-            .unwrap();
-        let out: u32 = engine.eval_async("return calc(...)", (1u32, 1u32)).await.unwrap();
+            Ok(())
+        })
+        .unwrap();
+        let out: u32 = ctx.eval_async("return calc(...)", (1u32, 1u32)).await.unwrap();
         assert_eq!(out, 2u32);
     }
 }
