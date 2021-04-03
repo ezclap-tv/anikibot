@@ -13,6 +13,7 @@ chrono = "0.4.19"
 pretty_env_logger = "0.4.0"
 tokio = { version = "1.4.0", features = ["full"] }
 tokio-stream = { version = "0.1.5", features = ["io-util"] }
+async-channel = "1.6.1"
 sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "sqlite", "chrono", "migrate", "macros" ] }
 serde = { version = "1.0", features = ["derive"] }
 toml = { version = "0.5.8" }

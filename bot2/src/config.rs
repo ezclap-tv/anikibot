@@ -55,6 +55,12 @@ impl Config {
             },
         }
     }
+
+    pub fn script(&self) -> script::Config {
+        script::Config {
+            memory_limit: Some(self.worker_memory_limit),
+        }
+    }
 }
 impl Default for Config {
     fn default() -> Self {
