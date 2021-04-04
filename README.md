@@ -1,3 +1,7 @@
+# anikibot
+
+This chat bot is currently in the middle of a re-write. Head over to [bot2](./bot2) to see how to use the new version.
+
 ### Instructions
 
 -   clone the repo

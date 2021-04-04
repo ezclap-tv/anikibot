@@ -1234,7 +1234,7 @@ impl UserNotice {
                 cumulative_months: source.tags.require_number("msg-param-months")?,
                 recipient_display_name: source.tags.require_ns("msg-param-recipient-display-name")?,
                 recipient_id: source.tags.require("msg-param-recipient-id")?,
-                recipient_login: source.tags.require("msg-param-recipient-name")?,
+                recipient_login: source.tags.require("msg-param-recipient-user-name")?,
                 sub_plan: source.tags.require("msg-param-sub-plan")?,
                 sub_plan_name: source.tags.require_ns("msg-param-sub-plan-name")?,
                 gift_months: source.tags.get_number("msg-param-gift-months").unwrap_or(1),
@@ -1245,7 +1245,7 @@ impl UserNotice {
                 cumulative_months: source.tags.require_number("msg-param-months")?,
                 recipient_display_name: source.tags.require_ns("msg-param-recipient-display-name")?,
                 recipient_id: source.tags.require("msg-param-recipient-id")?,
-                recipient_login: source.tags.require("msg-param-recipient-name")?,
+                recipient_login: source.tags.require("msg-param-recipient-user-name")?,
                 sub_plan: source.tags.require("msg-param-sub-plan")?,
                 sub_plan_name: source.tags.require_ns("msg-param-sub-plan-name")?,
                 gift_months: source.tags.get_number("msg-param-gift-months").unwrap_or(1),
@@ -1901,7 +1901,7 @@ mod tests {
         display-name=TWW2;emotes=;id=e9176cd8-5e22-4684-ad40-ce53c2561c5e;\
         login=tww2;mod=0;msg-id=subgift;msg-param-months=1;\
         msg-param-recipient-display-name=Mr_Woodchuck;msg-param-recipient-id=89614178;\
-        msg-param-recipient-name=mr_woodchuck;msg-param-sub-plan-name=House\\sof\\sNyoro~n;\
+        msg-param-recipient-user-name=mr_woodchuck;msg-param-sub-plan-name=House\\sof\\sNyoro~n;\
         msg-param-sub-plan=1000;room-id=19571752;subscriber=0;\
         system-msg=TWW2\\sgifted\\sa\\sTier\\s1\\ssub\\sto\\sMr_Woodchuck!;\
         tmi-sent-ts=1521159445153;turbo=0;user-id=13405587;user-type=staff \
@@ -2092,7 +2092,7 @@ mod tests {
 "msg-param-promo-name"
 "msg-param-recipient-display-name"
 "msg-param-recipient-id"
-"msg-param-recipient-name"
+"msg-param-recipient-user-name"
 "msg-param-sender-login"
 "msg-param-sender-name"
 "msg-param-should-share-streak"
