@@ -7,14 +7,16 @@ pub struct Credentials {
 }
 #[derive(Clone, serde::Deserialize)]
 pub struct Config {
-    pub database_name: String,
+    pub main_channel: String,
+    pub main_channel_prefix: String,
     pub worker_memory_limit: usize,
     pub concurrency: usize,
     pub credentials: Option<Credentials>,
 }
 #[derive(Clone, serde::Deserialize)]
 struct PartialConfig {
-    database_name: Option<String>,
+    main_channel: Option<String>,
+    main_channel_prefix: Option<String>,
     worker_memory_limit: Option<usize>,
     concurrency: Option<usize>,
     credentials: Option<Credentials>,
@@ -32,8 +34,7 @@ impl Config {
         let cfg = match toml::from_str::<PartialConfig>(&cfg) {
             Ok(value) => value.into(),
             Err(err) => {
-                log::warn!("Error while reading config: {}; Falling back to defaults", err);
-                Config::default()
+                panic!("Error while reading config: {}", err);
             }
         };
         log::info!("Using config: {}", cfg);
@@ -42,7 +43,7 @@ impl Config {
 
     pub fn twitch(&self) -> twitch::Config {
         twitch::Config {
-            membership_data: true,
+            membership_data: false,
             credentials: match &self.credentials {
                 Some(Credentials {
                     twitch_login,
@@ -62,20 +63,14 @@ impl Config {
         }
     }
 }
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            database_name: ":memory:".into(),
-            worker_memory_limit: 512 * 1024 * 1024,
-            concurrency: num_cpus::get(),
-            credentials: None,
-        }
-    }
-}
+
 impl From<PartialConfig> for Config {
     fn from(cfg: PartialConfig) -> Config {
         Config {
-            database_name: cfg.database_name.unwrap_or_else(|| ":memory:".into()),
+            main_channel: cfg
+                .main_channel
+                .unwrap_or_else(|| panic!("Config.main_channel MUST be set")),
+            main_channel_prefix: cfg.main_channel_prefix.unwrap_or_else(|| "!".into()),
             worker_memory_limit: cfg.worker_memory_limit.unwrap_or(512 * 1024 * 1024),
             concurrency: cfg.concurrency.unwrap_or_else(num_cpus::get),
             credentials: cfg.credentials,
@@ -85,7 +80,7 @@ impl From<PartialConfig> for Config {
 impl Display for Config {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config {{")?;
-        writeln!(f, "\tdatabase_name = '{}',", self.database_name)?;
+        writeln!(f, "\tmain_channel = '{:?}',", self.main_channel)?;
         writeln!(f, "\tworker_memory_limit = {},", self.worker_memory_limit)?;
         writeln!(f, "\tconcurrency = {},", self.concurrency)?;
         writeln!(f, "\tcredentials = ...,")?;

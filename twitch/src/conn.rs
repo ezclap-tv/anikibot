@@ -142,14 +142,14 @@ impl Sender {
     ///
     /// Use at your own risk.
     pub async fn send(&mut self, message: &str) -> Result<()> {
-        log::debug!("Sent message: {}", message);
+        log::debug!("Sent message: {}", message.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(message.as_bytes()).await?;
         Ok(())
     }
     pub async fn pong(&mut self, arg: Option<&str>) -> Result<()> {
         write::pong(&mut self.buffer, arg)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -157,7 +157,7 @@ impl Sender {
     /// Sends a capability request
     pub async fn cap(&mut self, with_membership: bool) -> Result<()> {
         write::cap(&mut self.buffer, with_membership)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -173,7 +173,7 @@ impl Sender {
     /// Sends a `NICK <login>` message
     pub async fn nick(&mut self, login: &str) -> Result<()> {
         write::nick(&mut self.buffer, login)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -181,7 +181,7 @@ impl Sender {
     /// Join `channel`
     pub async fn join(&mut self, channel: &str) -> Result<()> {
         write::join(&mut self.buffer, channel)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -189,7 +189,7 @@ impl Sender {
     /// Leave `channel`
     pub async fn part(&mut self, channel: &str) -> Result<()> {
         write::part(&mut self.buffer, channel)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -197,7 +197,7 @@ impl Sender {
     /// Sends `message` to `channel`
     pub async fn privmsg(&mut self, channel: &str, message: &str) -> Result<()> {
         write::privmsg(&mut self.buffer, channel, message)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -205,7 +205,7 @@ impl Sender {
     /// Send `message` directly to `user`
     pub async fn whisper(&mut self, user: &str, message: &str) -> Result<()> {
         write::whisper(&mut self.buffer, user, message)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -213,7 +213,7 @@ impl Sender {
     /// Equivalent to `/me <message>`
     pub async fn me(&mut self, channel: &str, message: &str) -> Result<()> {
         write::whisper(&mut self.buffer, channel, message)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -221,7 +221,7 @@ impl Sender {
     /// Clears chat in `channel`
     pub async fn clear(&mut self, channel: &str) -> Result<()> {
         write::clear(&mut self.buffer, channel)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -232,7 +232,7 @@ impl Sender {
     /// minutes.
     pub async fn timeout(&mut self, channel: &str, user: &str, duration: Option<Duration>) -> Result<()> {
         write::timeout(&mut self.buffer, channel, user, duration)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -240,7 +240,7 @@ impl Sender {
     /// Removes `user`'s timeout in `channel`
     pub async fn untimeout(&mut self, channel: &str, user: &str) -> Result<()> {
         write::untimeout(&mut self.buffer, channel, user)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -248,7 +248,7 @@ impl Sender {
     /// Ban `user` in `channel`
     pub async fn ban(&mut self, channel: &str, user: &str) -> Result<()> {
         write::ban(&mut self.buffer, channel, user)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -256,7 +256,7 @@ impl Sender {
     /// Unban `user` in `channel`
     pub async fn unban(&mut self, channel: &str, user: &str) -> Result<()> {
         write::unban(&mut self.buffer, channel, user)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -264,7 +264,7 @@ impl Sender {
     /// For changing the room state, e.g. slow mode, emote-only mode, etc.
     pub async fn roomstate(&mut self, channel: &str, mode: Mode, state: bool) -> Result<()> {
         write::roomstate(&mut self.buffer, channel, mode, state)?;
-        log::debug!("Sent message: {}", self.buffer);
+        log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;
         Ok(())
@@ -313,7 +313,7 @@ pub async fn connect(config: Config) -> Result<Connection> {
     );
 
     sender.cap(config.membership_data).await?;
-    // wait for CAP * ACK :twitch.tv/commands twitch.tv/tags
+    // wait for CAP * ACK :twitch.tv/commands twitch.tv/tags [twitch.tv/membership]
     if let Some(line) = read.next().await {
         let line = line?;
         match tmi::Message::parse(line)? {
@@ -343,6 +343,7 @@ pub async fn connect(config: Config) -> Result<Connection> {
             sender.nick(&login).await?;
         }
     }
+    // wait for the '001' message, which means connection was successful
     if let Some(line) = read.next().await {
         let line = line?;
         match tmi::Message::parse(line)? {
@@ -352,7 +353,7 @@ pub async fn connect(config: Config) -> Result<Connection> {
                 }
             }
             _ => {
-                return err!(Generic, "Did not receive expected capabilities");
+                return err!(Generic, "Failed to authenticate");
             }
         }
     }

@@ -1,19 +1,20 @@
-use std::sync::Arc;
-use std::{convert::TryFrom, iter::FromIterator};
+use std::{
+    sync::Arc,
+    thread::{self, JoinHandle},
+};
 
 use anyhow::Result;
 use async_channel as mpmc;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::{runtime::Handle, sync::mpsc};
 
 use crate::config::Config;
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
     Debug { what: String },
-    CreateCommand { name: Arc<String>, code: Arc<String> },
-    DeleteCommand { name: Arc<String> },
-    EditCommand { name: Arc<String>, code: Arc<String> },
+    LoadCommand { name: Arc<String>, code: Arc<String> },
+    UnloadCommand { name: Arc<String> },
 }
 
 pub struct Command {
@@ -23,49 +24,54 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn parse(source: twitch::Privmsg) -> Option<Command> {
-        if let Some(cmd) = source.text().strip_prefix('!') {
-            let (name, args) = match cmd.split_once(' ') {
-                Some((name, args)) => (name.to_string(), args.split(' ').map(String::from).collect()),
-                None => (cmd.to_string(), script::Variadic::new()),
-            };
-
-            Some(Command { source, name, args })
-        } else {
-            None
-        }
+    pub fn new(source: twitch::Privmsg, name: String, args: script::Variadic) -> Command {
+        Command { source, name, args }
     }
 }
 
 pub struct Worker {
     id: usize,
     config: Config,
-    /* db: sqlx::SqliteConnection, */
     ctx: script::Context,
     inst_receiver: mpsc::Receiver<Instruction>,
-    tmi_receiver: Arc<mpmc::Receiver<Command>>,
+    msg_receiver: Arc<mpmc::Receiver<Command>>,
     tmi_sender: Arc<Mutex<twitch::conn::Sender>>,
 }
 
 unsafe impl Send for Worker {}
 
 impl Worker {
+    pub fn spawn(
+        id: usize,
+        config: Config,
+        inst_receiver: mpsc::Receiver<Instruction>,
+        msg_receiver: Arc<mpmc::Receiver<Command>>,
+        tmi_sender: Arc<Mutex<twitch::conn::Sender>>,
+    ) -> JoinHandle<()> {
+        let tokio_handle = Handle::current();
+        thread::spawn(move || {
+            tokio_handle.block_on(async move {
+                Worker::new(id, config, inst_receiver, msg_receiver, tmi_sender)
+                    .run()
+                    .await;
+            });
+        })
+    }
+
     pub fn new(
         id: usize,
         config: Config,
-        /* db: sqlx::SqliteConnection, */
         inst_receiver: mpsc::Receiver<Instruction>,
-        tmi_receiver: Arc<mpmc::Receiver<Command>>,
+        msg_receiver: Arc<mpmc::Receiver<Command>>,
         tmi_sender: Arc<Mutex<twitch::conn::Sender>>,
     ) -> Worker {
         let script_config = config.script();
         Worker {
             id,
             config,
-            /* db, */
             ctx: script::Context::init(script_config).expect("Failed to initialize worker script context"),
             inst_receiver,
-            tmi_receiver,
+            msg_receiver,
             tmi_sender,
         }
     }
@@ -75,7 +81,7 @@ impl Worker {
             tokio::select! {
                 _ = tokio::signal::ctrl_c() => break,
                 Some(inst) = self.inst_receiver.recv() => self.handle_inst(inst).await,
-                Ok(message) = self.tmi_receiver.recv() => self.handle_msg(message).await
+                Ok(message) = self.msg_receiver.recv() => self.handle_msg(message).await
             }
         }
     }
@@ -88,73 +94,38 @@ impl Worker {
     pub async fn handle_inst(&mut self, inst: Instruction) {
         match inst {
             Instruction::Debug { what } => log::info!("[Worker #{}] Debug instruction: {}", self.id, what),
-            Instruction::CreateCommand { name, code } => {
+            Instruction::LoadCommand { name, code } => {
                 self.ctx.unload(&name);
                 if let Err(err) = self.ctx.load((*name).clone(), &code) {
                     log::error!("[Worker #{}] Failed to load command {}: {}", self.id, name, err);
                 }
             }
-            Instruction::DeleteCommand { name } => self.ctx.unload(&name),
-            Instruction::EditCommand { name, code } => {
-                self.ctx.unload(&name);
-                if let Err(err) = self.ctx.load((*name).clone(), &code) {
-                    log::error!("[Worker #{}] Failed to load command {}: {}", self.id, name, err);
-                }
-            }
+            Instruction::UnloadCommand { name } => self.ctx.unload(&name),
         }
     }
 
     pub async fn handle_msg(&mut self, command: Command) {
-        match &command.name[..] {
-            "eval" if !command.args.is_empty() => {
-                match self.ctx.eval_async::<(), String>(&command.args.join(" "), ()).await {
-                    Ok(r) => {
-                        log::info!("[Worker #{}] -> {}", self.id, r);
-                        if let Err(err) = self.tmi_sender.lock().await.privmsg(command.source.channel(), &r).await {
-                            // TODO: may need to properly handle some errors
-                            log::error!("[Worker #{}] Error while writing to TMI: {}", self.id, err);
-                        }
+        if self.ctx.exists(&command.name) {
+            match self
+                .ctx
+                .exec_async::<script::Variadic, String>(&command.name, command.args)
+                .await
+            {
+                Ok(r) => {
+                    log::info!("[Worker #{}] -> {}", self.id, r);
+                    if let Err(err) = self.tmi_sender.lock().await.privmsg(command.source.channel(), &r).await {
+                        // TODO: may need to properly handle some errors
+                        log::error!("[Worker #{}] Error while writing to TMI: {}", self.id, err);
                     }
-                    Err(e) => match e {
-                        script::Error::Memory(_) => {
-                            log::error!("[Worker #{}] Ran out of memory", self.id);
-                            self.reset();
-                            return;
-                        }
-                        _ => {
-                            log::error!("[Worker #{}] -> {}", self.id, &e);
-                            return;
-                        }
-                    },
                 }
-            }
-            name if self.ctx.exists(name) => {
-                match self
-                    .ctx
-                    .exec_async::<script::Variadic, String>(name, command.args)
-                    .await
-                {
-                    Ok(r) => {
-                        log::info!("[Worker #{}] -> {}", self.id, r);
-                        if let Err(err) = self.tmi_sender.lock().await.privmsg(command.source.channel(), &r).await {
-                            // TODO: may need to properly handle some errors
-                            log::error!("[Worker #{}] Error while writing to TMI: {}", self.id, err);
-                        }
+                Err(e) => match e {
+                    script::Error::Memory(_) => {
+                        log::error!("[Worker #{}] Ran out of memory", self.id);
+                        self.reset();
                     }
-                    Err(e) => match e {
-                        script::Error::Memory(_) => {
-                            log::error!("[Worker #{}] Ran out of memory", self.id);
-                            self.reset();
-                            return;
-                        }
-                        _ => {
-                            log::error!("[Worker #{}] -> {}", self.id, &e);
-                            return;
-                        }
-                    },
-                }
+                    _ => log::error!("[Worker #{}] -> {}", self.id, &e),
+                },
             }
-            _ => (),
         }
     }
 }

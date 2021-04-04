@@ -1,6 +1,22 @@
-worker_memory_limit = 536870912 # specified in BYTES
-# concurrency = 6 # by default, this will be however many logical cores are available
+# the channel to join by default, so you can setup the bot (join other channels, create commands etc)
+# TEMP: this should be part of web dashboard setup
+main_channel = "your_channel_name"
+# what each command needs to be prefixed by (in the main channel)
+# TEMP: this should be part of web dashboard setup
+main_channel_prefix = "!"
+# maximum memory a worker can allocate
+# if it reaches this limit, it will interrupt any command execution and reset it's state
+# specified in BYTES
+worker_memory_limit = 536870912 # this is 512 MiB
+# how many commands may be executed at once (in parallel)
+# by default, this is the number of logical cores available
+# concurrency = 6 
 
-[credentials] # if not specified, bot will connect as anonymous and will be unable to send messages to chat
+# credentials for various services (usernames, authorization tokens, etc.)
+[credentials]
+# Twitch
+# if not specified, bot will connect as anonymous and will be unable to send messages to chat
+# this is the name you use to login to twitch, not your display name
 twitch_login = "your_login_here"
-twitch_token = "oauth:<something! generate this using the link in the readme>"
+# login to twitch, then go to this link: https://twitchapps.com/tmi to generate this token
+twitch_token = "oauth:..."

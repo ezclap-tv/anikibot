@@ -1,19 +1,14 @@
 #![feature(str_split_once)]
 mod config;
+mod db;
+mod util;
 mod worker;
 
-const BOT_DB_NAME: &str = "sqlite:bot.db";
-
-use std::{
-    sync::Arc,
-    thread::{self, JoinHandle},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, thread::JoinHandle, time::Duration};
 
 use anyhow::Result;
 use async_channel as mpmc;
 use config::Config;
-use sqlx::Connection;
 use tokio::sync::{mpsc, Mutex};
 use worker::Worker;
 
@@ -21,12 +16,16 @@ fn init_logger() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "DEBUG");
     }
-    Ok(pretty_env_logger::try_init()?)
+    Ok(alto_logger::init_term_logger()?)
 }
 
 struct Bot {
     config: Config,
     db: sqlx::SqliteConnection,
+    // DB cache
+    channels: HashMap<String, db::Channel>,
+    commands: HashMap<String, db::Command>,
+
     inst_senders: Vec<mpsc::Sender<worker::Instruction>>,
     /// TMI Message Sender (wrapper over a TCP stream write half)
     tmi_sender: Arc<Mutex<twitch::conn::Sender>>,
@@ -37,96 +36,301 @@ struct Bot {
     _workers: Vec<JoinHandle<()>>,
 }
 
+macro_rules! respond {
+    ($self:ident, $channel:expr, $msg:literal) => {{
+        $self.tmi_sender
+            .lock()
+            .await
+            .privmsg($channel, $msg)
+            .await?;
+    }};
+    ($self:ident, $channel:expr, $($arg:tt)*) => {{
+        $self.tmi_sender
+            .lock()
+            .await
+            .privmsg($channel, &format!($($arg)*))
+            .await?;
+    }}
+}
+
+macro_rules! broadcast {
+    ($self:ident, $inst:expr) => {
+        async {
+            let inst = $inst;
+            for sender in $self.inst_senders.iter() {
+                sender.send(inst.clone()).await?;
+            }
+            anyhow::Result::<()>::Ok(())
+        }
+    };
+}
+
 impl Bot {
     pub async fn init(config: Config) -> Result<Bot> {
         // init db
-        let mut db: sqlx::SqliteConnection = sqlx::SqliteConnection::connect(BOT_DB_NAME).await?;
-        sqlx::migrate!().run(&mut db).await?;
+        let mut db = db::connect(true).await?;
 
         // connect to twitch
         let (mut tmi_sender, tmi_reader) = twitch::connect(config.twitch()).await?.split();
-        // TEMP: manage connected channels through db
-        tmi_sender.join("moscowwbish").await?;
+
+        // join channels
+        // main channel
+        tmi_sender.join(&config.main_channel).await?;
+        // persisted channels
+        let mut channels = HashMap::new();
+        for channel in db::Channel::all(&mut db).await? {
+            if channel.joined == 1 {
+                log::info!("Joining {}", channel.name);
+                tmi_sender.join(&channel.name).await?;
+            }
+            channels.insert(channel.name.clone(), channel);
+        }
+
         let tmi_sender = Arc::new(Mutex::new(tmi_sender));
 
+        // multi-producer multi-consumer queue for incoming messages
+        // these will be produced by the main message loop
+        // and consumed by workers
         let (msg_sender, msg_receiver) = mpmc::bounded(config.concurrency);
         let msg_receiver = Arc::new(msg_receiver);
 
         // init worker threads
+        // these senders are for broadcasting to all workers
         let mut inst_senders = Vec::with_capacity(config.concurrency);
+        // this is for holding the worker thread join handles
         let mut workers = Vec::with_capacity(config.concurrency);
         for id in 0..config.concurrency {
             let (inst_sender, inst_receiver) = mpsc::channel(4);
             inst_senders.push(inst_sender);
 
-            // TODO: is db inside worker really necessary?
-            /* let db = sqlx::SqliteConnection::connect(BOT_DB_NAME).await?; */
-            let handle = tokio::runtime::Handle::current();
-            let msg_receiver_clone = msg_receiver.clone();
-            let tmi_sender_clone = tmi_sender.clone();
-            let config_clone = config.clone();
-            workers.push(thread::spawn(move || {
-                handle.block_on(async move {
-                    Worker::new(
-                        id,
-                        config_clone,
-                        /* db, */
-                        inst_receiver,
-                        msg_receiver_clone,
-                        tmi_sender_clone,
-                    )
-                    .run()
-                    .await;
-                })
-            }))
+            workers.push(Worker::spawn(
+                id,
+                config.clone(),
+                inst_receiver,
+                msg_receiver.clone(),
+                tmi_sender.clone(),
+            ))
         }
 
         tmi_sender.lock().await.privmsg("moscowwbish", "Connected").await?;
 
-        Ok(Bot {
+        let mut bot = Bot {
             config,
             db,
+            commands: HashMap::new(),
+            channels,
             inst_senders,
             tmi_sender,
             msg_sender,
             tmi_reader,
             _workers: workers,
-        })
+        };
+
+        // initialize commands from db
+        for cmd in db::Command::all(&mut bot.db).await? {
+            let (name, code) = (Arc::new(cmd.name().clone()), Arc::new(cmd.code.clone()));
+            broadcast!(bot, worker::Instruction::LoadCommand { name, code }).await?;
+            bot.commands.insert(cmd.name().clone(), cmd);
+        }
+
+        Ok(bot)
     }
 
     pub async fn reconnect(&mut self) -> Result<()> {
-        let (mut sender, reader) = twitch::connect(twitch::Config::default()).await?.split();
-        // TEMP: manage connected channels through db
-        sender.join("moscowwbish").await?;
-        *(self.tmi_sender.lock().await) = sender;
-        self.tmi_reader = reader;
+        let (mut tmi_sender, tmi_reader) = twitch::connect(twitch::Config::default()).await?.split();
+        tmi_sender.join(&self.config.main_channel).await?;
+
+        for channel in self.channels.values() {
+            if channel.joined == 1 {
+                tmi_sender.join(&channel.name).await?;
+            }
+        }
+
+        *(self.tmi_sender.lock().await) = tmi_sender;
+        self.tmi_reader = tmi_reader;
 
         Ok(())
     }
 
-    pub async fn worker_broadcast(&mut self, inst: worker::Instruction) -> Result<()> {
-        for sender in self.inst_senders.iter() {
-            sender.send(inst.clone()).await?;
-        }
+    pub fn is_privileged_user(&mut self, login: &str) -> bool {
+        // TODO: configure this through db
+        ["moscowwbish", "compileraddict"].contains(&login)
+    }
 
+    pub async fn handle_msg(&mut self, message: twitch::Privmsg) -> Result<()> {
+        let cmd_prefix = match self.channels.get(message.channel()) {
+            Some(v) => &v.prefix,
+            None if message.channel() == self.config.main_channel => &self.config.main_channel_prefix,
+            _ => return Ok(()),
+        };
+        if let Some((name, args)) = util::split_cmd(cmd_prefix, message.text()) {
+            // TODO: more robust args parsing (maybe a macro)
+            // bulk of this code is argument parsing, simplifying this would greatly
+            // simplify the code, too.
+            // maybe a macro like:
+            // let (name, code) = cmd!(args => @name, *code)
+            // required parameters: @param
+            // optional parameters: ?param
+            // rest parameters: *param
+            match name {
+                "test" => {
+                    broadcast!(self, worker::Instruction::Debug { what: "Hello".into() }).await?;
+                }
+                "ping" => {
+                    respond!(self, message.channel(), "Pong!");
+                }
+                "create" if self.is_privileged_user(message.user.login()) => {
+                    // !create <cmd name> <code>
+                    let mut args = util::parse_args(args, false);
+                    if args.len() > 1 {
+                        let name = args.remove(0);
+                        let code = args.join(" ");
+
+                        match self.commands.get_mut(&name) {
+                            Some(command) => {
+                                command.code = code.clone();
+                                command.save(&mut self.db).await?;
+
+                                let (name, code) = (Arc::new(name), Arc::new(code));
+                                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
+                                respond!(self, message.channel(), "Command modified");
+                            }
+                            None => {
+                                let mut command = db::Command::new(name.clone(), code.clone());
+                                command.save(&mut self.db).await?;
+
+                                let (name, code) = (Arc::new(name), Arc::new(code));
+                                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
+                                respond!(self, message.channel(), "Command created");
+                            }
+                        }
+                    } else {
+                        respond!(self, message.channel(), "Usage: !create <name> <code>");
+                    }
+                }
+                "delete" if self.is_privileged_user(message.user.login()) => {
+                    // !delete <cmd name>
+                    let mut args = util::parse_args(args, true);
+                    if !args.is_empty() {
+                        let name = args.remove(0);
+
+                        match self.commands.remove(&name) {
+                            Some(mut command) => {
+                                command.delete(&mut self.db).await?;
+                                let name = Arc::new(name);
+                                broadcast!(self, worker::Instruction::UnloadCommand { name }).await?;
+                                respond!(self, message.channel(), "Command deleted");
+                            }
+                            None => {
+                                respond!(self, message.channel(), "Commant doesn't exist");
+                            }
+                        }
+                    } else {
+                        respond!(self, message.channel(), "Usage: !delete <name>");
+                    }
+                }
+                "join" if self.is_privileged_user(message.user.login()) => {
+                    // !join <channel> [prefix]
+                    let mut args = util::parse_args(args, true);
+                    if args.len() > 0 {
+                        let name = args.remove(0);
+                        let prefix = if args.len() > 0 { Some(args.remove(0)) } else { None };
+                        if name == self.config.main_channel {
+                            respond!(self, message.channel(), "Can't join main channel");
+                        } else {
+                            match self.channels.get_mut(&name) {
+                                Some(channel) if channel.joined == 1 => {
+                                    respond!(self, message.channel(), "Channel already joined");
+                                }
+                                Some(channel) => {
+                                    channel.joined = 1;
+                                    if let Some(prefix) = prefix {
+                                        channel.prefix = prefix;
+                                    }
+                                    channel.save(&mut self.db).await?;
+                                    // TODO: actually check if this is true
+                                    // for now it just joins and doesn't care if it doesn't work
+                                    self.tmi_sender.lock().await.join(&name).await?;
+                                    respond!(self, message.channel(), "Channel joined successfully");
+                                }
+                                _ => {
+                                    let mut channel = db::Channel::new(name, prefix);
+                                    channel.save(&mut self.db).await?;
+                                    self.tmi_sender.lock().await.join(&channel.name).await?;
+                                    self.channels.insert(channel.name.clone(), channel);
+                                    respond!(self, message.channel(), "Channel joined successfully");
+                                }
+                            }
+                        }
+                    } else {
+                        respond!(self, message.channel(), "Usage: !join <channel> [prefix]");
+                    }
+                }
+                "leave" if self.is_privileged_user(message.user.login()) => {
+                    // !leave <channel>
+                    // !leave this
+                    let mut args = util::parse_args(args, true);
+                    if !args.is_empty() {
+                        let name = args.remove(0);
+                        let which = if &name == "this" { message.channel() } else { &name };
+                        if which == self.config.main_channel {
+                            respond!(self, message.channel(), "Can't leave the main channel");
+                        } else {
+                            match self.channels.get_mut(which) {
+                                Some(channel) if channel.joined == 1 => {
+                                    channel.joined = 0;
+                                    channel.save(&mut self.db).await?;
+                                    // TODO: actually check if this is true
+                                    // for now it just leaves and doesn't care if it doesn't work
+                                    self.tmi_sender.lock().await.part(which).await?;
+                                    respond!(self, &self.config.main_channel, "Left channel {}", channel.name);
+                                }
+                                _ => {
+                                    respond!(self, message.channel(), "Channel not joined");
+                                }
+                            }
+                        }
+                    } else {
+                        respond!(self, message.channel(), "Usage: !leave <channel>");
+                    }
+                }
+                "prefix" if self.is_privileged_user(message.user.login()) => {
+                    // !prefix <channel> <prefix>
+                    // !prefix this <prefix>
+                    let mut args = util::parse_args(args, true);
+                    if args.len() > 1 {
+                        let name = args.remove(0);
+                        let prefix = args.remove(0);
+                        let which = if &name == "this" { message.channel() } else { &name };
+                        if which == self.config.main_channel {
+                            respond!(self, message.channel(), "Can't change main channel prefix");
+                        } else {
+                            match self.channels.get_mut(which) {
+                                Some(channel) => {
+                                    channel.prefix = prefix;
+                                    channel.save(&mut self.db).await?;
+                                    respond!(self, &self.config.main_channel, "Channel prefix changed");
+                                }
+                                None => {
+                                    respond!(self, message.channel(), "Channel not joined");
+                                }
+                            }
+                        }
+                    } else {
+                        respond!(self, message.channel(), "Usage: !prefix <channel> <prefix>");
+                    }
+                }
+                _ => {
+                    let name = name.to_string();
+                    let args = util::parse_args(args, true);
+                    self.msg_sender.send(worker::Command::new(message, name, args)).await?
+                }
+            }
+        }
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        // initialize commands from db
-        #[derive(sqlx::FromRow)]
-        struct Command {
-            name: String,
-            code: String,
-        }
-        for cmd in sqlx::query_as::<sqlx::Sqlite, Command>("SELECT name, code FROM command")
-            .fetch_all(&mut self.db)
-            .await?
-        {
-            let (name, code) = (Arc::new(cmd.name), Arc::new(cmd.code));
-            self.worker_broadcast(worker::Instruction::CreateCommand { name, code })
-                .await?;
-        }
         loop {
             tokio::select! {
                 _ = tokio::signal::ctrl_c() => {
@@ -136,41 +340,9 @@ impl Bot {
                     Ok(msg) => {
                         match msg {
                         twitch::Message::Ping(ping) => {
-                            log::info!("Got PING");
                             self.tmi_sender.lock().await.pong(ping.arg()).await?;
-                            log::info!("Sent PONG");
                         },
-                        twitch::Message::Privmsg(message) => {
-                            if let Some(cmd) = worker::Command::parse(message) {
-                                // TODO: configure this through db
-                                if cmd.source.user.login() == "moscowwbish" || cmd.source.user.login() == "compileraddict" {
-                                    // TODO: so many allocations, remove pls
-                                    match &cmd.name[..] {
-                                        "test" => self.worker_broadcast(worker::Instruction::Debug { what: "Hello".into() }).await?,
-                                        "create" => {
-                                            if cmd.args.len() > 2 {
-                                                let (name, code) = (cmd.args[0].clone(), cmd.args[1..].join(" "));
-                                                log::info!("Create command '{}': \n{}", name, code);
-                                                let (name, code) = (Arc::new(name), Arc::new(code));
-                                                self.worker_broadcast(worker::Instruction::CreateCommand { name, code }).await?;
-                                            } else {
-                                                self.tmi_sender.lock().await.privmsg(cmd.source.channel(), "Usage: !create <name> <code>").await?;
-                                            }
-                                        },
-                                        "delete" => {
-                                            if !cmd.args.is_empty() {
-                                                let name = Arc::new(cmd.args[0].clone());
-                                                log::info!("Delete command '{}'", *name);
-                                                self.worker_broadcast(worker::Instruction::DeleteCommand { name }).await?;
-                                            } else {
-                                                self.tmi_sender.lock().await.privmsg(cmd.source.channel(), "Usage: !delete <name>").await?;
-                                            }
-                                        },
-                                        _ => self.msg_sender.send(cmd).await?
-                                    }
-                                }
-                            }
-                        },
+                        twitch::Message::Privmsg(message) => self.handle_msg(message).await?,
                         other => log::info!("{:?}", other)
                     }},
                     Err(err) => match err {

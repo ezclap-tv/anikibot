@@ -1,10 +1,10 @@
 use twitch::{Config, Message};
 
-fn init_logger() -> std::result::Result<(), log::SetLoggerError> {
+fn init_logger() -> std::result::Result<(), alto_logger::Error> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "DEBUG");
     }
-    pretty_env_logger::try_init()
+    alto_logger::init_term_logger()
 }
 
 #[tokio::main]
