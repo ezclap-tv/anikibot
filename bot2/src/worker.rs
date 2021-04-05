@@ -8,7 +8,7 @@ use async_channel as mpmc;
 use tokio::sync::Mutex;
 use tokio::{runtime::Handle, sync::mpsc};
 
-use crate::config::Config;
+use crate::{config::Config, util};
 
 #[derive(Clone, Debug)]
 pub enum Instruction {
@@ -20,12 +20,18 @@ pub enum Instruction {
 pub struct Command {
     pub source: twitch::Privmsg,
     pub name: String,
-    pub args: script::Variadic,
+    pub args: String,
+    pub privileged: bool,
 }
 
 impl Command {
-    pub fn new(source: twitch::Privmsg, name: String, args: script::Variadic) -> Command {
-        Command { source, name, args }
+    pub fn new(source: twitch::Privmsg, name: String, args: String, privileged: bool) -> Command {
+        Command {
+            source,
+            name,
+            args,
+            privileged,
+        }
     }
 }
 
@@ -105,27 +111,34 @@ impl Worker {
     }
 
     pub async fn handle_msg(&mut self, command: Command) {
-        if self.ctx.exists(&command.name) {
-            match self
-                .ctx
-                .exec_async::<script::Variadic, String>(&command.name, command.args)
-                .await
-            {
-                Ok(r) => {
-                    log::info!("[Worker #{}] -> {}", self.id, r);
-                    if let Err(err) = self.tmi_sender.lock().await.privmsg(command.source.channel(), &r).await {
-                        // TODO: may need to properly handle some errors
-                        log::error!("[Worker #{}] Error while writing to TMI: {}", self.id, err);
-                    }
-                }
-                Err(e) => match e {
-                    script::Error::Memory(_) => {
-                        log::error!("[Worker #{}] Ran out of memory", self.id);
-                        self.reset();
-                    }
-                    _ => log::error!("[Worker #{}] -> {}", self.id, &e),
-                },
+        let result = match &command.name[..] {
+            "eval" if command.privileged => {
+                self.ctx
+                    .eval_async::<script::Variadic, String>(&command.args, script::Variadic::new())
+                    .await
             }
+            name if self.ctx.exists(name) => {
+                self.ctx
+                    .exec_async::<script::Variadic, String>(&command.name, util::parse_args(&command.args, true))
+                    .await
+            }
+            _ => return,
+        };
+        match result {
+            Ok(r) => {
+                log::info!("[Worker #{}] -> {}", self.id, r);
+                if let Err(err) = self.tmi_sender.lock().await.privmsg(command.source.channel(), &r).await {
+                    // TODO: may need to properly handle some errors
+                    log::error!("[Worker #{}] Error while writing to TMI: {}", self.id, err);
+                }
+            }
+            Err(e) => match e {
+                script::Error::Memory(_) => {
+                    log::error!("[Worker #{}] Ran out of memory", self.id);
+                    self.reset();
+                }
+                _ => log::error!("[Worker #{}] -> {}", self.id, &e),
+            },
         }
     }
 }

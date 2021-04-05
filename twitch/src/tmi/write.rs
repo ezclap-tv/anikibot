@@ -23,6 +23,29 @@ TODO: write tests
 ✅ /followersoff
 */
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Prefix {
+    flag: u8,
+}
+impl Prefix {
+    pub fn get(&mut self) -> &'static str {
+        match self.flag {
+            0 => {
+                self.flag = 1;
+                "💬"
+            }
+            1 => {
+                self.flag = 0;
+                "💭"
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+impl Default for Prefix {
+    fn default() -> Self { Prefix { flag: 0 } }
+}
+
 struct NoAllocWrite<'a>(&'a mut String);
 impl<'a> fmt::Write for NoAllocWrite<'a> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
@@ -66,9 +89,15 @@ pub fn part(buffer: &mut String, channel: &str) -> fmt::Result {
     write!(NoAllocWrite(buffer), "PART #{}\r\n", channel)
 }
 
-pub fn privmsg(buffer: &mut String, channel: &str, message: &str) -> fmt::Result {
+pub fn privmsg(buffer: &mut String, channel: &str, prefix: &mut Prefix, message: &str) -> fmt::Result {
     buffer.clear();
-    write!(NoAllocWrite(buffer), "PRIVMSG #{} :{}\r\n", channel, message)
+    write!(
+        NoAllocWrite(buffer),
+        "PRIVMSG #{} :{} {}\r\n",
+        channel,
+        prefix.get(),
+        message
+    )
 }
 pub fn whisper(buffer: &mut String, user: &str, message: &str) -> fmt::Result {
     buffer.clear();
@@ -165,14 +194,14 @@ pub mod tests {
     fn write_output_is_correct() {
         let expected = "PRIVMSG #TEST :HELLO :)\r\n";
         let mut buf = String::with_capacity(expected.len());
-        privmsg(&mut buf, "TEST", "HELLO :)").unwrap();
+        privmsg(&mut buf, "TEST", &mut Prefix::default(), "HELLO :)").unwrap();
         assert_eq!(buf, expected.to_string());
     }
 
     #[test]
     fn write_doesnt_allocate() {
         let mut buf = String::new();
-        privmsg(&mut buf, "a", "b").unwrap_err();
+        privmsg(&mut buf, "a", &mut Prefix::default(), "b").unwrap_err();
     }
 
     #[test]

@@ -164,14 +164,8 @@ impl Bot {
             _ => return Ok(()),
         };
         if let Some((name, args)) = util::split_cmd(cmd_prefix, message.text()) {
-            // TODO: more robust args parsing (maybe a macro)
-            // bulk of this code is argument parsing, simplifying this would greatly
-            // simplify the code, too.
-            // maybe a macro like:
-            // let (name, code) = cmd!(args => @name, *code)
-            // required parameters: @param
-            // optional parameters: ?param
-            // rest parameters: *param
+            // TODO: yank impls of these commands somewhere else
+            // so that they can be re-used with the bot REST API
             match name {
                 "test" => {
                     broadcast!(self, worker::Instruction::Debug { what: "Hello".into() }).await?;
@@ -186,7 +180,7 @@ impl Bot {
                         let name = args.remove(0);
                         let code = args.join(" ");
 
-                        match self.commands.get_mut(&name) {
+                        match dbg!(self.commands.get_mut(&name)) {
                             Some(command) => {
                                 command.code = code.clone();
                                 command.save(&mut self.db).await?;
@@ -198,6 +192,7 @@ impl Bot {
                             None => {
                                 let mut command = db::Command::new(name.clone(), code.clone());
                                 command.save(&mut self.db).await?;
+                                self.commands.insert(command.name().clone(), command);
 
                                 let (name, code) = (Arc::new(name), Arc::new(code));
                                 broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
@@ -322,8 +317,11 @@ impl Bot {
                 }
                 _ => {
                     let name = name.to_string();
-                    let args = util::parse_args(args, true);
-                    self.msg_sender.send(worker::Command::new(message, name, args)).await?
+                    let args = args.to_string();
+                    let privileged = self.is_privileged_user(message.user.login());
+                    self.msg_sender
+                        .send(worker::Command::new(message, name, args, privileged))
+                        .await?
                 }
             }
         }
