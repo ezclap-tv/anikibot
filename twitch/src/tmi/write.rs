@@ -24,26 +24,26 @@ TODO: write tests
 */
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Prefix {
+pub struct SameMessageBypass {
     flag: u8,
 }
-impl Prefix {
+impl SameMessageBypass {
     pub fn get(&mut self) -> &'static str {
         match self.flag {
             0 => {
                 self.flag = 1;
-                "💬"
+                ""
             }
             1 => {
                 self.flag = 0;
-                "💭"
+                "⠀"
             }
             _ => unreachable!(),
         }
     }
 }
-impl Default for Prefix {
-    fn default() -> Self { Prefix { flag: 0 } }
+impl Default for SameMessageBypass {
+    fn default() -> Self { SameMessageBypass { flag: 0 } }
 }
 
 struct NoAllocWrite<'a>(&'a mut String);
@@ -89,14 +89,14 @@ pub fn part(buffer: &mut String, channel: &str) -> fmt::Result {
     write!(NoAllocWrite(buffer), "PART #{}\r\n", channel)
 }
 
-pub fn privmsg(buffer: &mut String, channel: &str, prefix: &mut Prefix, message: &str) -> fmt::Result {
+pub fn privmsg(buffer: &mut String, channel: &str, smb: &mut SameMessageBypass, message: &str) -> fmt::Result {
     buffer.clear();
     write!(
         NoAllocWrite(buffer),
-        "PRIVMSG #{} :{} {}\r\n",
+        "PRIVMSG #{} :{}{}\r\n",
         channel,
-        prefix.get(),
-        message
+        message,
+        smb.get()
     )
 }
 pub fn whisper(buffer: &mut String, user: &str, message: &str) -> fmt::Result {
@@ -194,14 +194,14 @@ pub mod tests {
     fn write_output_is_correct() {
         let expected = "PRIVMSG #TEST :HELLO :)\r\n";
         let mut buf = String::with_capacity(expected.len());
-        privmsg(&mut buf, "TEST", &mut Prefix::default(), "HELLO :)").unwrap();
+        privmsg(&mut buf, "TEST", &mut SameMessageBypass::default(), "HELLO :)").unwrap();
         assert_eq!(buf, expected.to_string());
     }
 
     #[test]
     fn write_doesnt_allocate() {
         let mut buf = String::new();
-        privmsg(&mut buf, "a", &mut Prefix::default(), "b").unwrap_err();
+        privmsg(&mut buf, "a", &mut SameMessageBypass::default(), "b").unwrap_err();
     }
 
     #[test]

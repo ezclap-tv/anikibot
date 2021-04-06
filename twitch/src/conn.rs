@@ -131,7 +131,7 @@ pub struct Sender {
     buffer: String,
     rate: RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     stream: WriteHalf<TlsStream<TcpStream>>,
-    prefix: write::Prefix,
+    smb: write::SameMessageBypass,
 }
 impl Sender {
     pub fn new(stream: WriteHalf<TlsStream<TcpStream>>) -> Sender {
@@ -139,7 +139,7 @@ impl Sender {
             buffer: String::with_capacity(2048),
             rate: RateLimiter::direct(governor::Quota::per_second(NonZeroU32::new(1).unwrap())),
             stream,
-            prefix: write::Prefix::default(),
+            smb: write::SameMessageBypass::default(),
         }
     }
     /// Sends a raw `message` to twitch.
@@ -202,7 +202,7 @@ impl Sender {
     }
     /// Sends `message` to `channel`
     pub async fn privmsg(&mut self, channel: &str, message: &str) -> Result<()> {
-        write::privmsg(&mut self.buffer, channel, &mut self.prefix, message)?;
+        write::privmsg(&mut self.buffer, channel, &mut self.smb, message)?;
         log::debug!("Sent message: {}", self.buffer.trim_end());
         self.rate.until_ready().await;
         self.stream.write_all(self.buffer.as_bytes()).await?;

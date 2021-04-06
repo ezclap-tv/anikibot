@@ -172,6 +172,7 @@ impl Tags {
         let mut local_i = 0;
         let mut previous_char = "";
 
+        // TODO: this apparently isn't enough to parse unicode...
         for (i, c) in data.grapheme_indices(true) {
             match current_key {
                 None => match c {
@@ -190,6 +191,8 @@ impl Tags {
                     // when we parse ';', save value, push it into map
                     // and then parse key
                     ";" => {
+                        // TODO the error may be here, the `..local_i` could be wrong.
+                        // have to investigate.
                         let value = &remainder[..local_i];
                         if !value.is_empty() {
                             map.insert(key.into(), value.into());
