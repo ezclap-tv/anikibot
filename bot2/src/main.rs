@@ -157,7 +157,105 @@ impl Bot {
         ["moscowwbish", "compileraddict"].contains(&login)
     }
 
-    pub async fn handle_msg(&mut self, message: twitch::Privmsg) -> Result<()> {
+    async fn create(&mut self, name: String, code: String) -> Result<&'static str> {
+        match self.commands.get_mut(&name) {
+            Some(command) => {
+                // persist
+                command.code = code.clone();
+                command.save(&mut self.db).await?;
+
+                // propagate to workers
+                let (name, code) = (Arc::new(name), Arc::new(code));
+                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
+            }
+            None => {
+                // persist
+                let mut command = db::Command::new(name.clone(), code.clone());
+                command.save(&mut self.db).await?;
+                self.commands.insert(command.name().clone(), command);
+
+                // propagate to workers
+                let (name, code) = (Arc::new(name), Arc::new(code));
+                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
+            }
+        }
+
+        Ok("Command saved")
+    }
+
+    async fn delete(&mut self, name: String) -> Result<&'static str> {
+        match self.commands.remove(&name) {
+            Some(mut command) => {
+                command.delete(&mut self.db).await?;
+                let name = Arc::new(name);
+                broadcast!(self, worker::Instruction::UnloadCommand { name }).await?;
+                Ok("Command deleted")
+            }
+            None => Ok("Command does not exist"),
+        }
+    }
+
+    async fn join(&mut self, name: String, prefix: Option<String>) -> Result<&'static str> {
+        if name == self.config.main_channel {
+            Ok("Can't join main channel")
+        } else {
+            match self.channels.get_mut(&name) {
+                Some(channel) if channel.joined == 1 => Ok("Channel already joined"),
+                Some(channel) => {
+                    channel.joined = 1;
+                    if let Some(prefix) = prefix {
+                        channel.prefix = prefix;
+                    }
+                    channel.save(&mut self.db).await?;
+                    // TODO: actually check if bot joins the channel
+                    self.tmi_sender.lock().await.join(&name).await?;
+                    Ok("Channel joined successfully")
+                }
+                _ => {
+                    let mut channel = db::Channel::new(name, prefix);
+                    channel.save(&mut self.db).await?;
+                    self.tmi_sender.lock().await.join(&channel.name).await?;
+                    self.channels.insert(channel.name.clone(), channel);
+                    Ok("Channel joined successfully")
+                }
+            }
+        }
+    }
+
+    async fn leave(&mut self, which: &str) -> Result<Option<&'static str>> {
+        if which == self.config.main_channel {
+            Ok(Some("Can't leave the main channel"))
+        } else {
+            match self.channels.get_mut(which) {
+                Some(channel) if channel.joined == 1 => {
+                    channel.joined = 0;
+                    channel.save(&mut self.db).await?;
+                    // TODO: actually check if this is true
+                    // for now it just leaves and doesn't care if it doesn't work
+                    self.tmi_sender.lock().await.part(which).await?;
+                    Ok(None)
+                }
+                _ => Ok(Some("Channel not joined")),
+            }
+        }
+    }
+
+    async fn prefix(&mut self, which: &str, prefix: String) -> Result<&'static str> {
+        if which == self.config.main_channel {
+            Ok("Can't change main channel prefix")
+        } else {
+            match self.channels.get_mut(which) {
+                Some(channel) => {
+                    channel.prefix = prefix;
+                    channel.save(&mut self.db).await?;
+                    Ok("Prefix changed")
+                }
+                None => Ok("Channel not joined"),
+            }
+        }
+    }
+
+    async fn handle_msg(&mut self, message: twitch::Privmsg) -> Result<()> {
         let cmd_prefix = match self.channels.get(message.channel()) {
             Some(v) => &v.prefix,
             None if message.channel() == self.config.main_channel => &self.config.main_channel_prefix,
@@ -166,10 +264,8 @@ impl Bot {
         if let Some((name, args)) = util::split_cmd(cmd_prefix, message.text()) {
             // TODO: yank impls of these commands somewhere else
             // so that they can be re-used with the bot REST API
+            // - they should just be methods.
             match name {
-                "test" => {
-                    broadcast!(self, worker::Instruction::Debug { what: "Hello".into() }).await?;
-                }
                 "ping" => {
                     respond!(self, message.channel(), "Pong!");
                 }
@@ -179,26 +275,8 @@ impl Bot {
                     if args.len() > 1 {
                         let name = args.remove(0);
                         let code = args.join(" ");
-
-                        match dbg!(self.commands.get_mut(&name)) {
-                            Some(command) => {
-                                command.code = code.clone();
-                                command.save(&mut self.db).await?;
-
-                                let (name, code) = (Arc::new(name), Arc::new(code));
-                                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
-                                respond!(self, message.channel(), "Command modified");
-                            }
-                            None => {
-                                let mut command = db::Command::new(name.clone(), code.clone());
-                                command.save(&mut self.db).await?;
-                                self.commands.insert(command.name().clone(), command);
-
-                                let (name, code) = (Arc::new(name), Arc::new(code));
-                                broadcast!(self, worker::Instruction::LoadCommand { name, code }).await?;
-                                respond!(self, message.channel(), "Command created");
-                            }
-                        }
+                        let res = self.create(name, code).await?;
+                        respond!(self, message.channel(), "{}", res)
                     } else {
                         respond!(self, message.channel(), "Usage: !create <name> <code>");
                     }
@@ -208,18 +286,8 @@ impl Bot {
                     let mut args = util::parse_args(args, true);
                     if !args.is_empty() {
                         let name = args.remove(0);
-
-                        match self.commands.remove(&name) {
-                            Some(mut command) => {
-                                command.delete(&mut self.db).await?;
-                                let name = Arc::new(name);
-                                broadcast!(self, worker::Instruction::UnloadCommand { name }).await?;
-                                respond!(self, message.channel(), "Command deleted");
-                            }
-                            None => {
-                                respond!(self, message.channel(), "Commant doesn't exist");
-                            }
-                        }
+                        let res = self.delete(name).await?;
+                        respond!(self, message.channel(), "{}", res);
                     } else {
                         respond!(self, message.channel(), "Usage: !delete <name>");
                     }
@@ -230,33 +298,8 @@ impl Bot {
                     if args.len() > 0 {
                         let name = args.remove(0);
                         let prefix = if args.len() > 0 { Some(args.remove(0)) } else { None };
-                        if name == self.config.main_channel {
-                            respond!(self, message.channel(), "Can't join main channel");
-                        } else {
-                            match self.channels.get_mut(&name) {
-                                Some(channel) if channel.joined == 1 => {
-                                    respond!(self, message.channel(), "Channel already joined");
-                                }
-                                Some(channel) => {
-                                    channel.joined = 1;
-                                    if let Some(prefix) = prefix {
-                                        channel.prefix = prefix;
-                                    }
-                                    channel.save(&mut self.db).await?;
-                                    // TODO: actually check if this is true
-                                    // for now it just joins and doesn't care if it doesn't work
-                                    self.tmi_sender.lock().await.join(&name).await?;
-                                    respond!(self, message.channel(), "Channel joined successfully");
-                                }
-                                _ => {
-                                    let mut channel = db::Channel::new(name, prefix);
-                                    channel.save(&mut self.db).await?;
-                                    self.tmi_sender.lock().await.join(&channel.name).await?;
-                                    self.channels.insert(channel.name.clone(), channel);
-                                    respond!(self, message.channel(), "Channel joined successfully");
-                                }
-                            }
-                        }
+                        let res = self.join(name, prefix).await?;
+                        respond!(self, message.channel(), "{}", res);
                     } else {
                         respond!(self, message.channel(), "Usage: !join <channel> [prefix]");
                     }
@@ -268,22 +311,9 @@ impl Bot {
                     if !args.is_empty() {
                         let name = args.remove(0);
                         let which = if &name == "this" { message.channel() } else { &name };
-                        if which == self.config.main_channel {
-                            respond!(self, message.channel(), "Can't leave the main channel");
-                        } else {
-                            match self.channels.get_mut(which) {
-                                Some(channel) if channel.joined == 1 => {
-                                    channel.joined = 0;
-                                    channel.save(&mut self.db).await?;
-                                    // TODO: actually check if this is true
-                                    // for now it just leaves and doesn't care if it doesn't work
-                                    self.tmi_sender.lock().await.part(which).await?;
-                                    respond!(self, &self.config.main_channel, "Left channel {}", channel.name);
-                                }
-                                _ => {
-                                    respond!(self, message.channel(), "Channel not joined");
-                                }
-                            }
+                        let res = self.leave(which).await?;
+                        if let Some(res) = res {
+                            respond!(self, message.channel(), "{}", res);
                         }
                     } else {
                         respond!(self, message.channel(), "Usage: !leave <channel>");
@@ -297,20 +327,8 @@ impl Bot {
                         let name = args.remove(0);
                         let prefix = args.remove(0);
                         let which = if &name == "this" { message.channel() } else { &name };
-                        if which == self.config.main_channel {
-                            respond!(self, message.channel(), "Can't change main channel prefix");
-                        } else {
-                            match self.channels.get_mut(which) {
-                                Some(channel) => {
-                                    channel.prefix = prefix;
-                                    channel.save(&mut self.db).await?;
-                                    respond!(self, &self.config.main_channel, "Channel prefix changed");
-                                }
-                                None => {
-                                    respond!(self, message.channel(), "Channel not joined");
-                                }
-                            }
-                        }
+                        let res = self.prefix(which, prefix).await?;
+                        respond!(self, message.channel(), "{}", res);
                     } else {
                         respond!(self, message.channel(), "Usage: !prefix <channel> <prefix>");
                     }

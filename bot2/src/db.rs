@@ -35,6 +35,8 @@ impl Command {
     #[inline]
     pub fn is_saved(&self) -> bool { self.id != -1 }
 
+    // TODO: this is bad, just have two methods instead (insert/update)
+    // and query the DB to see if the command exists.
     /// Save a channel
     ///
     /// This will insert a new channel or update the existing one
