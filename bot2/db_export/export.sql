@@ -16,7 +16,9 @@ DELETE FROM "channel";
 /*!40000 ALTER TABLE "channel" DISABLE KEYS */;
 INSERT INTO "channel" ("id", "name", "prefix", "joined") VALUES
 	(1, 'compileraddict', 'xD', 1),
-	(2, 'supinic', 'xD ', 1);
+	(2, 'supinic', 'xD ', 1),
+	(3, 'where_is_x', '!', 1),
+	(4, 'ambadev', '!', 1);
 /*!40000 ALTER TABLE "channel" ENABLE KEYS */;
 
 -- Dumping data for table bot.command: -1 rows
@@ -26,7 +28,13 @@ INSERT INTO "command" ("id", "name", "code") VALUES
 	(1, 'hello', 'return "hi!"'),
 	(2, 'dank', 'local n = ...; n = tonumber(n) or 5; local out = ""; for _ = 1,n do out = out .. "FeelsDankMan " end; return out'),
 	(3, 'asdf', 'return "asdf"'),
-	(4, 'bot', 'return "A novelty bot made by https://twitch.tv/moscowwbish written in Rust, with an embedded Lua engine for executing commands. Source code available at https://github.com/jprochazk/anikibot"');
+	(4, 'bot', 'return "A novelty bot made by https://twitch.tv/moscowwbish written in Rust, with an embedded Lua engine for executing commands. Source code available at https://github.com/jprochazk/anikibot"'),
+	(5, 'pongies', 'return "!ping"'),
+	(6, 'add', 'local a,b = ...; a = a or 0; b = b or 0; return a + b'),
+	(7, 'lolstartat1', 'local a = {"1"}; return a[1]'),
+	(8, 'sum', 'local n={...}; local s=0; for i=1,#n do s = s + n[i] end return s'),
+	(9, 'test10', 'return nil'),
+	(10, 'so', 'local name=...; if string.lower(name) == "rn_specter" then return "👉 https://twitter.com/rn_specterarts" else return nil end');
 /*!40000 ALTER TABLE "command" ENABLE KEYS */;
 
 -- Dumping data for table bot._sqlx_migrations: -1 rows

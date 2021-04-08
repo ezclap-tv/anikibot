@@ -183,8 +183,8 @@ impl Tags {
                         remainder = &remainder[(local_i + 1)..];
                         local_i = 0;
                     }
-                    _ => {
-                        local_i += 1;
+                    c => {
+                        local_i += c.as_bytes().len();
                     }
                 },
                 Some(key) => match c {
@@ -211,8 +211,8 @@ impl Tags {
                         end = i;
                         break;
                     }
-                    _ => {
-                        local_i += 1;
+                    c => {
+                        local_i += c.as_bytes().len();
                     }
                 },
             }
@@ -725,6 +725,41 @@ mod tests {
                 params: Some(Params(
                     ":Pong! Uptime: 6h,15m; Temperature: 54.8°C; Latency to TMI: 183ms; Commands used: 795".into()
                 )),
+                source: Pin::new(src.clone()),
+            },
+            Message::parse(src).unwrap()
+        )
+    }
+
+    #[test]
+    fn parse_tags_with_long_unicode_chars() {
+        // TODO
+        let src = "\
+        @login=supibot;room-id=;target-msg-id=25fd76d9-4731-4907-978e-a391134ebd67;tmi-sent-ts=-6795364578871;\
+        some-tag=とりくしい :tmi.twitch.tv CLEARMSG #randers :asdf\
+        "
+        .to_string();
+        assert_eq!(
+            Message {
+                tags: Tags(
+                    vec![
+                        ("login", "supibot"),
+                        ("target-msg-id", "25fd76d9-4731-4907-978e-a391134ebd67"),
+                        ("tmi-sent-ts", "-6795364578871"),
+                        ("some-tag", "とりくしい")
+                    ]
+                    .into_iter()
+                    .map(|(k, v)| (k.into(), v.into()))
+                    .collect(),
+                ),
+                prefix: Some(Prefix {
+                    nick: None,
+                    user: None,
+                    host: "tmi.twitch.tv".into(),
+                }),
+                cmd: Command::Clearmsg,
+                channel: Some("randers".into()),
+                params: Some(Params(":asdf".into())),
                 source: Pin::new(src.clone()),
             },
             Message::parse(src).unwrap()
