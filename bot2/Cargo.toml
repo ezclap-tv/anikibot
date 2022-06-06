@@ -11,7 +11,7 @@ anyhow = "1.0.39"
 log = "0.4.14"
 chrono = "0.4.19"
 alto_logger = "0.3.7"
-tokio = { version = "1.4.0", features = ["full"] }
+tokio = { version = "1.8.4", features = ["full"] }
 tokio-stream = { version = "0.1.5", features = ["io-util"] }
 async-channel = "1.6.1"
 sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "sqlite", "chrono", "migrate", "macros" ] }
